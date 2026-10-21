@@ -1,0 +1,35 @@
+# Non-secret configuration of the api component, mirrored from the env the
+# Deployment renders and mounted into the api container with envFrom (the
+# explicit env entries win for the same key); the Deployment's
+# checksum/config annotation rolls the pods whenever any of it changes. Every
+# key is a variable cmd/api reads (tests/render_test.sh). DATABASE_URL never
+# lands here: it lives in the Secret (templates/secret.yaml or
+# database.existingSecret). No *_MODE variable is ever rendered: this service
+# has no modes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "exception-management.fullname" . }}
+  labels:
+    {{- include "exception-management.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+data:
+  HTTP_ADDR: {{ .Values.config.httpAddr | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  KAFKA_BROKERS: {{ required "exception-management requires kafka.brokers to be set (KAFKA_BROKERS, comma-separated): the service runs on real Kafka only and exits at boot without it." .Values.kafka.brokers | quote }}
+  FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.fulfillmentExceptionsConsumerGroup to be set (FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.fulfillmentExceptionsConsumerGroup | quote }}
+  WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.workPlanningExceptionsConsumerGroup to be set (WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.workPlanningExceptionsConsumerGroup | quote }}
+  NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.networkFulfillmentExceptionsConsumerGroup to be set (NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.networkFulfillmentExceptionsConsumerGroup | quote }}
+  ORDER_CORRELATION_CONSUMER_GROUP: {{ required "exception-management requires config.orderCorrelationConsumerGroup to be set (ORDER_CORRELATION_CONSUMER_GROUP)" .Values.config.orderCorrelationConsumerGroup | quote }}
+  INVENTORY_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.inventoryExceptionsConsumerGroup to be set (INVENTORY_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.inventoryExceptionsConsumerGroup | quote }}
+  RETURNS_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.returnsExceptionsConsumerGroup to be set (RETURNS_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.returnsExceptionsConsumerGroup | quote }}
+  {{- with .Values.config.outboxRelayInterval }}
+  OUTBOX_RELAY_INTERVAL: {{ . | quote }}
+  {{- end }}
+  OUTBOX_MAX_ATTEMPTS: {{ .Values.config.outboxMaxAttempts | quote }}
+  {{- with .Values.config.slaSweepInterval }}
+  SLA_SWEEP_INTERVAL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.shutdownDrainDelay }}
+  SHUTDOWN_DRAIN_DELAY: {{ . | quote }}
+  {{- end }}

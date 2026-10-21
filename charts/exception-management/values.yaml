@@ -1,0 +1,194 @@
+# Default values for exception-management.
+#
+# This chart deploys the ONLY runtime the service has: real Postgres and
+# real Kafka. There is no in-memory mode and no consumer that is off by
+# default, so a render without a database source or without brokers fails
+# with a message naming the value (templates/_helpers.tpl).
+
+replicaCount: 1
+
+# The image is NEVER pulled from a registry in the local kind cluster: it is
+# built from the local checkout and side-loaded with `kind load docker-image`
+# (warehouse-infra overrides repository and tag with a content-derived
+# local-<hash> tag). `pullPolicy: IfNotPresent` is required there, or the
+# kubelet tries to pull from Docker Hub and ImagePullBackOffs.
+image:
+  repository: warehouse/exception-management
+  pullPolicy: IfNotPresent
+  tag: "local"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# The service writes nothing to disk (logs go to stdout, the migrations are
+# embedded in the binary), so the root filesystem is read-only.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Environment read by cmd/api (cmd/api/main.go header). Every key maps 1:1
+# to one env var. The *_MODE variables are NEVER rendered: this service has
+# no modes, real Postgres and real Kafka are the only runtime.
+config:
+  httpAddr: ":8080"                  # HTTP_ADDR
+  logLevel: "info"                   # LOG_LEVEL: debug | info | warn (or warning) | error
+  # OUTBOX_RELAY_INTERVAL: Go duration ("500ms", "2s") or plain seconds.
+  # Empty = not rendered; the binary defaults to 1s.
+  outboxRelayInterval: ""
+  # OUTBOX_MAX_ATTEMPTS: how many times one outbox row may fail before the
+  # relay excludes it from claims, so a poison row cannot block the relay
+  # forever. 0 = unlimited.
+  outboxMaxAttempts: 20
+  # SLA_SWEEP_INTERVAL: how often the SLA sweeper escalates breached open
+  # cases (Go duration or plain seconds). Empty = not rendered; the binary
+  # defaults to 1m.
+  slaSweepInterval: ""
+  # SHUTDOWN_DRAIN_DELAY: wait after /readyz flips before closing the
+  # listener. Empty = not rendered; the binary defaults to 5s.
+  shutdownDrainDelay: ""
+  # The STABLE consumer group ids of the six consumers (MANDATORY: the
+  # binary exits at boot without them, and the chart refuses to render with
+  # an empty one). They are fixed names, not derived from the pod, so a
+  # rescheduled pod resumes from its committed offsets. Do not rename them
+  # in a running environment: a new group id re-reads the topic from the
+  # start. (.claude/rules/integration-events.md.)
+  fulfillmentExceptionsConsumerGroup: "exception-management-fulfillment"        # FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP (warehouse.fulfillment.events)
+  workPlanningExceptionsConsumerGroup: "exception-management-work-planning"     # WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP (warehouse.work-planning.events)
+  networkFulfillmentExceptionsConsumerGroup: "exception-management-network-fulfillment"  # NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP (warehouse.network-fulfillment.events)
+  orderCorrelationConsumerGroup: "exception-management-order-correlation"       # ORDER_CORRELATION_CONSUMER_GROUP (warehouse.order-management.events, auto-resolve correlation)
+  inventoryExceptionsConsumerGroup: "exception-management-inventory"            # INVENTORY_EXCEPTIONS_CONSUMER_GROUP (warehouse.inventory.events)
+  returnsExceptionsConsumerGroup: "exception-management-returns"                # RETURNS_EXCEPTIONS_CONSUMER_GROUP (warehouse.returns-processing.events)
+
+# MANDATORY: the chart refuses to render unless database.url or
+# database.existingSecret is set (templates/_helpers.tpl:
+# exception-management.requireDatabase).
+database:
+  url: ""
+  existingSecret: ""
+  existingSecretKey: "DATABASE_URL"
+  # Key, in the same existingSecret, of a DIRECT (non-pooled, session-mode)
+  # Postgres connection string used ONLY for the golang-migrate startup step,
+  # never for the runtime pgxpool, which always uses existingSecretKey /
+  # DATABASE_URL. golang-migrate takes a session-scoped pg_advisory_lock that
+  # PgBouncer's transaction pooling cannot honour. `optional: true` on the
+  # rendered secretKeyRef so a secret without this key still starts the pod:
+  # the binary falls back to DATABASE_URL.
+  migrationsExistingSecretKey: "MIGRATIONS_DATABASE_URL"
+
+# MANDATORY: KAFKA_BROKERS (comma-separated). No default on purpose: the
+# service runs on real Kafka only and the chart refuses to render without
+# brokers. Produced topic: warehouse.exception-management.events (the relay's
+# writer auto-creates it and its .dlq on first write, the fleet convention);
+# consumed: warehouse.fulfillment.events, warehouse.work-planning.events,
+# warehouse.network-fulfillment.events, warehouse.order-management.events,
+# warehouse.inventory.events, warehouse.returns-processing.events. The
+# service never creates topics through an admin API, and /readyz does not
+# wait for any topic: a consumed topic that does not exist yet (its producer
+# has not written) shows as consumer retry logs, not as unreadiness.
+kafka:
+  brokers: ""
+
+# Extra env vars appended to the api container as a raw list. A *_MODE name
+# is refused at render time (templates/_helpers.tpl).
+extraEnv: []
+
+# The Postgres dial (migrations + ping) at boot is bounded by the binary's
+# own timeouts. periodSeconds * failureThreshold of the startup probe gives
+# a ~60 s window before the kubelet gives up. Once it succeeds, liveness
+# takes over (/healthz is liveness only). Readiness uses /readyz, which
+# checks the drain gate, Postgres AND that a Kafka broker answers a metadata
+# request (reachability only, never topics; the verdict is cached): a Kafka
+# outage takes the pod out of the Service and a shutdown flips it to
+# not-ready first, both by design.
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  periodSeconds: 2
+  failureThreshold: 30
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Room for the binary's graceful shutdown, sequential in the worst case:
+# SHUTDOWN_DRAIN_DELAY (default 5s) + HTTP drain (10s) + outbox relay drain
+# (10s) + inbound consumers drain (15s) + consumer Close (5s) = 45s. Keep it
+# above that sum if you raise config.shutdownDrainDelay; the chart refuses
+# a shorter value.
+terminationGracePeriodSeconds: 50
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- MCP server (cmd/mcp) ---
+# A READ-ONLY Model Context Protocol server over Streamable HTTP
+# (list_open_exceptions, get_exception, get_exception_policies,
+# get_sla_report) on the same Postgres as the api. A separate workload
+# (component=mcp, Service <fullname>-mcp:8090); it never writes, never dials
+# Kafka and has no auth (fleet rule: the ClusterIP boundary is the access
+# control). DISABLED by default: the default render is unchanged.
+mcp:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8090"
+  service:
+    type: ClusterIP
+    port: 8090
+    targetPort: 8090
+  # Extra env vars appended to the mcp container as a raw list. A *_MODE
+  # name is refused at render time (templates/_helpers.tpl).
+  extraEnv: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
