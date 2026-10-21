@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	tckafka "github.com/testcontainers/testcontainers-go/modules/kafka"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/claudioed/exception-management/internal/adapters/inbound/kafka"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres"
@@ -37,8 +38,13 @@ func TestMain(m *testing.M) {
 }
 
 // The kafka module import stays reachable from the Kafka-touching test
-// files (TestKafkaIntegrationTestsUseTestcontainers).
-var _ = tckafka.Run
+// files (TestKafkaIntegrationTestsUseTestcontainers); the postgres one for
+// the pgx-touching files (TestPostgresIntegrationTestsUseTestcontainers).
+// The containers themselves come from internal/testing/{kafkatest,pgtest}.
+var (
+	_ = tckafka.Run
+	_ = tcpostgres.Run
+)
 
 // itSeq mints unique ids (event ids, group ids) per test binary.
 var itSeq atomic.Int64
