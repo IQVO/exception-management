@@ -1,0 +1,23 @@
+# Used by `helm lint` / `ct lint`: every optional value and component set at
+# once (api + mcp), so a template that renders alone but collides with
+# another is caught by `helm lint`.
+database:
+  existingSecret: "exception-management-db"
+kafka:
+  brokers: "kafka-0.kafka.warehouse-systems.svc.cluster.local:9092,kafka-1.kafka.warehouse-systems.svc.cluster.local:9092"
+config:
+  logLevel: "debug"
+  outboxRelayInterval: "500ms"
+  outboxMaxAttempts: 20
+  slaSweepInterval: "45s"
+  shutdownDrainDelay: "5s"
+  fulfillmentExceptionsConsumerGroup: "exception-management-fulfillment"
+  workPlanningExceptionsConsumerGroup: "exception-management-work-planning"
+  networkFulfillmentExceptionsConsumerGroup: "exception-management-network-fulfillment"
+  orderCorrelationConsumerGroup: "exception-management-order-correlation"
+  inventoryExceptionsConsumerGroup: "exception-management-inventory"
+  returnsExceptionsConsumerGroup: "exception-management-returns"
+
+# The optional mcp component on, together with the api.
+mcp:
+  enabled: true

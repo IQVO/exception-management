@@ -1,0 +1,12 @@
+apiVersion: v2
+name: exception-management
+description: Exception Management — the warehouse's exception cases (opened/touched by consumed source facts, triaged, assigned, resolved, auto-resolved by policy correlation) and the severity/queue/SLA policies that govern them; publishes Exception events on warehouse.exception-management.events
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/IQVO/exception-management
+keywords:
+  - ddd
+  - hexagonal-architecture
+  - warehouse-management-system
+  - golang
