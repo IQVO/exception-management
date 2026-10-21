@@ -1,11 +1,11 @@
 // Command api is exception-management's composition root. It wires the whole
 // service: the REST surface (every route of apis/openapi.yaml on chi, the
 // Idempotency-Key middleware over the Postgres store, the NUL guard, the
-// readiness gate), the use cases over the real Postgres adapters, and the
-// transactional-outbox relay (the event side leaves the service ONLY through
-// it, ADR 0004/0005). The inbound Kafka consumers are the next build step on
-// this same binary; their six pinned consumer-group variables are already
-// read and validated at boot (fail-closed).
+// readiness gate), the use cases over the real Postgres adapters, the six
+// inbound Kafka fact consumers (each under its pinned consumer-group
+// variable), the SLA sweep ticker and the transactional-outbox relay (the
+// event side leaves the service ONLY through it, ADR 0004/0005). A consumer
+// that dies fails run — the process exits non-zero and the pod restarts.
 //
 // Runtime: real Postgres + real Kafka only (no memory adapters); the
 // embedded migrations run at boot before anything serves. A missing
@@ -24,17 +24,20 @@
 //	ORDER_CORRELATION_CONSUMER_GROUP
 //	INVENTORY_EXCEPTIONS_CONSUMER_GROUP
 //	RETURNS_EXCEPTIONS_CONSUMER_GROUP
-//	                          REQUIRED (fail-closed now; the consumers are the
-//	                          next build step; .claude/rules/integration-events.md)
+//	                          REQUIRED. Each consumer's group id
+//	                          (.claude/rules/integration-events.md)
 //	HTTP_ADDR                 listen address (default :8080)
 //	OUTBOX_RELAY_INTERVAL     relay poll interval (Go duration or seconds, default 1s)
 //	OUTBOX_MAX_ATTEMPTS       failures before the relay excludes a row (default 20, 0 = unlimited)
+//	SLA_SWEEP_INTERVAL        SLA sweep ticker interval (Go duration or seconds, default 1m)
 //	SHUTDOWN_DRAIN_DELAY      wait after flipping /readyz before closing (default 5s, 0 = off)
 //	LOG_LEVEL                 debug | info | warn | error (default info)
 //
 // /readyz is the drain gate AND a Postgres ping AND a Kafka metadata check
 // (a broker answers a metadata request that names NO topic: reachability
-// only, never topics), cached for a few seconds. /healthz is liveness only.
+// only, never topics — a consumed topic that does not exist yet, like the
+// wave-3 returns topic, is the reader's internal retry, never unreadiness),
+// cached for a few seconds. /healthz is liveness only.
 package main
 
 import (
@@ -117,7 +120,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	// setting, never the unlimited default by omission.
 	sink, relay := newRelay(cfg, pool, logger)
 
-	errCh := make(chan error, 1)
+	// The inbound side: six consumers (each under its pinned group id) and
+	// the SLA sweep ticker. A consumer death lands on errCh: run returns it,
+	// the process exits non-zero, the pod restarts.
+	errCh := make(chan error, 8)
 	go func() {
 		logger.Info("http server listening", "addr", cfg.httpAddr)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -131,10 +137,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			errCh <- err
 		}
 	}()
+	inbound := startInbound(ctx, cfg, pool, uow, clock, logger, errCh)
 
 	select {
 	case err := <-errCh:
 		awaitRelay(logger, relayDone)
+		inbound.await(logger)
+		inbound.close(logger)
 		closeSinkBounded(logger, sink)
 		return err
 	case <-ctx.Done():
@@ -143,7 +152,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	// The fleet shutdown order: (1) /readyz flips to 503 so no new traffic
 	// arrives, (2) wait the drain delay, (3) drain HTTP, (4) await the
 	// relay LAST so nothing committed above is stranded; the caller's
-	// deferred pool.Close runs after all of it.
+	// deferred pool.Close runs after all of it. The inbound consumers stop
+	// with the cancelled context between (3) and (4): their offsets only
+	// move after a durable effect, so an interrupted message is simply
+	// redelivered after the restart.
 	readiness.SetNotReady()
 	if delay := shutdownDrainDelay(logger); delay > 0 {
 		logger.Info("shutdown: readiness flipped to not-ready; waiting for traffic to drain", "drain_delay", delay.String())
@@ -155,6 +167,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("drain http: %w", err)
 	}
 	awaitRelay(logger, relayDone)
+	inbound.await(logger)
+	inbound.close(logger)
 	closeSinkBounded(logger, sink)
 	return nil
 }

@@ -107,6 +107,30 @@ func outboxMaxAttempts(raw string, logger *slog.Logger) int {
 // overrides it; "0" disables it).
 const DefaultShutdownDrainDelay = 5 * time.Second
 
+// DefaultSLASweepInterval is how often the SLA sweeper ticks
+// (SLA_SWEEP_INTERVAL overrides it).
+const DefaultSLASweepInterval = time.Minute
+
+// slaSweepInterval reads SLA_SWEEP_INTERVAL (a Go duration or plain
+// seconds). Unset, malformed or non-positive values use the default, so a
+// typo never disables the sweeper silently.
+func slaSweepInterval(raw string, logger *slog.Logger) time.Duration {
+	if raw == "" {
+		return DefaultSLASweepInterval
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		if secs, serr := strconv.ParseFloat(raw, 64); serr == nil {
+			d, err = time.Duration(secs*float64(time.Second)), nil
+		}
+	}
+	if err != nil || d <= 0 {
+		logger.Warn("invalid SLA_SWEEP_INTERVAL; using the default", "value", raw, "default", DefaultSLASweepInterval)
+		return DefaultSLASweepInterval
+	}
+	return d
+}
+
 // shutdownDrainDelay reads SHUTDOWN_DRAIN_DELAY ("0" disables; unset,
 // negative or unparsable = the default).
 func shutdownDrainDelay(logger *slog.Logger) time.Duration {

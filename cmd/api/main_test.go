@@ -140,6 +140,25 @@ func TestShutdownDrainDelay(t *testing.T) {
 	}
 }
 
+func TestSLASweepInterval(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
+	for _, tc := range []struct {
+		raw  string
+		want time.Duration
+	}{
+		{"", DefaultSLASweepInterval},
+		{"30s", 30 * time.Second},
+		{"5", 5 * time.Second}, // plain seconds
+		{"0", DefaultSLASweepInterval},
+		{"-1s", DefaultSLASweepInterval},
+		{"junk", DefaultSLASweepInterval},
+	} {
+		if got := slaSweepInterval(tc.raw, logger); got != tc.want {
+			t.Errorf("slaSweepInterval(%q) = %s, want %s", tc.raw, got, tc.want)
+		}
+	}
+}
+
 func TestNewLoggerLevels(t *testing.T) {
 	for _, level := range []string{"debug", "info", "warn", "warning", "error", "junk"} {
 		if newLogger(level) == nil {
