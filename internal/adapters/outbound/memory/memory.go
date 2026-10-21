@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/claudioed/exception-management/internal/application/ports"
+	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/exceptionpolicy"
 	"github.com/claudioed/exception-management/internal/domain/shared"
@@ -19,6 +20,10 @@ import (
 
 // The doubles return the PORT sentinel (ports.ErrNotFound) on a miss so
 // use-case errors.Is checks hold against every adapter, memory and Postgres.
+// They also enforce the STORAGE invariants the Postgres adapter enforces
+// (optimistic-concurrency version guard, one open case per dedup key,
+// append-only policy versions), so the repocontract suite proves the two
+// adapters equivalent.
 
 // Cases is the ExceptionCaseRepo double. Like the Postgres adapter, it
 // round-trips through the aggregate snapshot: a saved case is rehydrated on
@@ -33,14 +38,29 @@ type Cases struct {
 // NewCases returns an empty double.
 func NewCases() *Cases { return &Cases{byID: map[string]exceptioncase.Snapshot{}} }
 
-// Save stores the latest snapshot of c.
+// Save stores the latest snapshot of c, under the same guards as the
+// Postgres upsert: an update is legal only when the stored version is the
+// saved version minus one (optimistic concurrency), and a FIRST save of a
+// case whose dedup key already has an open case is refused — the double of
+// the partial unique index uq_exception_cases_one_open_per_key.
 func (r *Cases) Save(_ context.Context, c *exceptioncase.Case) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.byID[c.ID()]; !ok {
-		r.order = append(r.order, c.ID())
+	s := c.Snapshot()
+	if cur, ok := r.byID[s.ID]; ok {
+		if cur.Version != s.Version-1 {
+			return usecases.ErrConcurrentModification
+		}
+	} else {
+		for _, id := range r.order {
+			other := r.byID[id]
+			if other.Key == s.Key && other.Status != exceptioncase.StatusResolved {
+				return usecases.ErrOpenCaseExists
+			}
+		}
+		r.order = append(r.order, s.ID)
 	}
-	r.byID[c.ID()] = c.Snapshot()
+	r.byID[s.ID] = s
 	return nil
 }
 
@@ -59,19 +79,36 @@ func (r *Cases) FindByID(_ context.Context, id string) (*exceptioncase.Case, err
 	return r.restore(id)
 }
 
-// FindOpenByDedupKey returns the case owning the key (open or resolved — a
-// later fact touches it), or not-found.
+// FindOpenByDedupKey returns the case owning the key — the open case when
+// one exists, else the most recent RESOLVED case for the key (a later fact
+// touches it and never reopens it) — or not-found. The same owner rule the
+// Postgres adapter's ORDER BY (status <> 'RESOLVED') DESC, opened_at DESC
+// encodes.
 func (r *Cases) FindOpenByDedupKey(_ context.Context, key shared.DedupKey) (*exceptioncase.Case, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	var open, resolved *exceptioncase.Case
 	for _, id := range r.order {
 		c, err := r.restore(id)
 		if err != nil {
 			return nil, err
 		}
-		if c.Key().Equal(key) {
-			return c, nil
+		if !c.Key().Equal(key) {
+			continue
 		}
+		if c.Status() != exceptioncase.StatusResolved {
+			open = c // at most one open case per key exists (the index)
+			break
+		}
+		if resolved == nil || c.OpenedAt().After(resolved.OpenedAt()) {
+			resolved = c
+		}
+	}
+	if open != nil {
+		return open, nil
+	}
+	if resolved != nil {
+		return resolved, nil
 	}
 	return nil, ports.ErrNotFound
 }
@@ -120,10 +157,16 @@ type Policies struct {
 // NewPolicies returns an empty double.
 func NewPolicies() *Policies { return &Policies{latest: map[string]*exceptionpolicy.Policy{}} }
 
-// Save stores the version and marks it latest for its source type.
+// Save stores the version and marks it latest for its source type, under
+// the same guard as the Postgres INSERT: the source type already has THIS
+// version (or a newer one), so another writer declared it first — the double
+// of the (source_type, version) primary key.
 func (r *Policies) Save(_ context.Context, p *exceptionpolicy.Policy) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if cur, ok := r.latest[p.SourceType()]; ok && cur.Version() >= p.Version() {
+		return usecases.ErrConcurrentModification
+	}
 	r.latest[p.SourceType()] = p
 	return nil
 }
