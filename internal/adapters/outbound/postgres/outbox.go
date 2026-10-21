@@ -90,6 +90,16 @@ func (p *OutboxPublisher) enqueue(ctx context.Context, aggregType, aggregID stri
 	return nil
 }
 
+// nullable returns a *string of s, or nil when s is empty: the wire fields
+// the AsyncAPI schemas mark nullable (site_id, note) are PRESENT and null
+// when unset, never omitted and never "".
+func nullable(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // caseFactData renders one case fact's data in the pinned wire shape of ADR
 // 0004 (snake_case keys; the frozen source payload embedded as the JSON
 // object it is). An unknown fact type is a programming error, not a
@@ -99,7 +109,7 @@ func caseFactData(e exceptioncase.Event) (any, error) {
 	case exceptioncase.ExceptionOpened:
 		return openedData{
 			CaseID: f.CaseID(), SourceType: f.Key.SourceType, SourceSubject: f.Key.SourceSubject,
-			SiteID: f.Key.SiteID, Severity: string(f.Severity), Queue: f.Queue,
+			SiteID: nullable(f.Key.SiteID), Severity: string(f.Severity), Queue: f.Queue,
 			OpenedAt: f.OccurredAt().UTC(), SLADueAt: f.SLADueAt.UTC(),
 			SourceEventID: f.SourceEventID, SourcePayload: json.RawMessage(f.SourcePayload),
 		}, nil
@@ -119,7 +129,7 @@ func caseFactData(e exceptioncase.Event) (any, error) {
 	case exceptioncase.ExceptionResolved:
 		return resolvedData{
 			CaseID: f.CaseID(), ResolutionCode: f.ResolutionCode, RootCause: f.RootCause,
-			Note: f.Note, Actor: f.Actor.String(), At: f.OccurredAt().UTC(),
+			Note: nullable(f.Note), Actor: f.Actor.String(), At: f.OccurredAt().UTC(),
 		}, nil
 	case exceptioncase.ExceptionAutoResolved:
 		return autoResolvedData{
@@ -135,7 +145,7 @@ type openedData struct {
 	CaseID        string          `json:"case_id"`
 	SourceType    string          `json:"source_type"`
 	SourceSubject string          `json:"source_subject"`
-	SiteID        string          `json:"site_id"`
+	SiteID        *string         `json:"site_id"`
 	Severity      string          `json:"severity"`
 	Queue         string          `json:"queue"`
 	OpenedAt      time.Time       `json:"opened_at"`
@@ -169,7 +179,7 @@ type resolvedData struct {
 	CaseID         string    `json:"case_id"`
 	ResolutionCode string    `json:"resolution_code"`
 	RootCause      string    `json:"root_cause"`
-	Note           string    `json:"note"`
+	Note           *string   `json:"note"`
 	Actor          string    `json:"actor"`
 	At             time.Time `json:"at"`
 }
