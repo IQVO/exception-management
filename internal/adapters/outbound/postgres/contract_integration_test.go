@@ -31,3 +31,9 @@ func TestIdempotencyStoreContract(t *testing.T) {
 		return postgres.NewIdempotencyStore(pgtest.NewPool(t))
 	})
 }
+
+func TestProcessedEventsContract(t *testing.T) {
+	repocontract.ProcessedEvents(t, func(t *testing.T) ports.ProcessedEvents {
+		return postgres.NewProcessedEventRepo(pgtest.NewPool(t))
+	})
+}

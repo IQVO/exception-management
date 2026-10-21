@@ -23,3 +23,7 @@ func TestPolicyRepoContract(t *testing.T) {
 func TestIdempotencyStoreContract(t *testing.T) {
 	repocontract.IdempotencyStore(t, func(*testing.T) ports.IdempotencyStore { return memory.NewIdempotencyStore() })
 }
+
+func TestProcessedEventsContract(t *testing.T) {
+	repocontract.ProcessedEvents(t, func(*testing.T) ports.ProcessedEvents { return memory.NewProcessedEvents() })
+}

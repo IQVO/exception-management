@@ -265,6 +265,29 @@ func (s *IdempotencyStore) Save(_ context.Context, rec repository.IdempotencyRec
 	return nil
 }
 
+// ProcessedEvents is the in-memory ports.ProcessedEvents double: the
+// consumers' dedupe guard (the double of the processed_events table).
+type ProcessedEvents struct {
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+// NewProcessedEvents constructs an empty ProcessedEvents double.
+func NewProcessedEvents() *ProcessedEvents {
+	return &ProcessedEvents{seen: map[string]struct{}{}}
+}
+
+// Claim implements ports.ProcessedEvents; the first claim of an id wins.
+func (p *ProcessedEvents) Claim(_ context.Context, eventID string) (bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.seen[eventID]; ok {
+		return false, nil
+	}
+	p.seen[eventID] = struct{}{}
+	return true, nil
+}
+
 // Events collects everything published, for assertions.
 type Events struct {
 	mu     sync.Mutex

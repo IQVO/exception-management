@@ -65,6 +65,17 @@ type ExceptionPolicyRepo interface {
 	List(ctx context.Context) ([]*exceptionpolicy.Policy, error)
 }
 
+// ProcessedEvents is the inbound consumers' dedupe guard (the fleet rule:
+// one row per CloudEvents id). Claim runs inside the SAME UnitOfWork as the
+// effect it guards, so a rollback un-claims the id and a redelivery is
+// processed, not skipped. The Postgres adapter backs the processed_events
+// table; the in-memory double keeps the map.
+type ProcessedEvents interface {
+	// Claim records eventID as processed, returning false when an earlier
+	// call already recorded it (the duplicate outcome).
+	Claim(ctx context.Context, eventID string) (bool, error)
+}
+
 // IdempotencyStore keeps the answers of requests made with an
 // Idempotency-Key. The first writer of a key wins: a later Save of the same
 // key changes nothing, so two concurrent requests with one key cannot both
