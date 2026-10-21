@@ -1,6 +1,10 @@
-package ports
+package views
 
 import "time"
+
+// Package views holds the application's read DTOs: wire-friendly shapes the
+// inbound adapters consume. The ports package stays interfaces-only (arch
+// rule); the aggregates never leak past this package.
 
 // CaseView is the read DTO an inbound adapter (HTTP handler, ops agent)
 // receives for one case: the aggregate's Snapshot rendered as wire-friendly
