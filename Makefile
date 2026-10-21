@@ -142,6 +142,19 @@ vuln:
 	fi
 	$(GOVULNCHECK) ./...
 
+# API contracts sensor — mirrors the `api-lint` CI job: spectral over both
+# specs with the repo's rulesets, failing at warn severity.
+.PHONY: api-lint
+api-lint:
+	@if ! command -v spectral >/dev/null 2>&1; then \
+		echo "spectral is not installed (or not on PATH)."; \
+		echo "Install it the way CI does:"; \
+		echo "  npm install -g @stoplight/spectral-cli"; \
+		exit 1; \
+	fi
+	spectral lint apis/openapi.yaml --ruleset .spectral.yaml --fail-severity=warn
+	spectral lint apis/asyncapi.yaml --ruleset .spectral.asyncapi.yaml --fail-severity=warn
+
 # The fast self-correction loop: run this after every change, before committing.
 check: fmt-check vet build lint test
 
