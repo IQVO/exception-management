@@ -59,9 +59,9 @@ not a preference — there is nothing to "choose" here:
   consumer; Kafka integration tests via testcontainers only.
 
 Full standard, subdomain table and the fleet's cross-service type
-catalogue: warehouse-docs `docs/strategic-design/event-standard-cloudevents.md`.
-Record it in this repo as its own ADR "CloudEvents 1.0 as the mandatory
-event envelope" under `docs/docs/adr/`.
+catalogue live in the warehouse-docs repository (the CloudEvents event
+standard page). Record this repo's own envelope decisions as ADRs under
+`docs/adr/`.
 
 ### Published types
 
