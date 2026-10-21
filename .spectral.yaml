@@ -5,3 +5,29 @@ rules:
   operation-tags: error
   info-description: error
   oas3-api-servers: error
+  # The success-response check, restated for this contract: every operation
+  # of every path but /exceptions answers 200 or 201 (the only success codes
+  # this API uses). POST /exceptions is EXEMPT on purpose: it exists only to
+  # document its permanent 405 — there is no case creation over REST (every
+  # case opens from a consumed fact, ADR 0001) and the router says so with
+  # the method-not-allowed problem. (The override replaces the extended rule
+  # wholesale; this Spectral version has no per-operation `except`.)
+  operation-success-response:
+    description: Operation must have at least one 2xx or 3xx response (POST /exceptions, the deliberate 405-only operation, excepted).
+    severity: warn
+    given: "$.paths[?(@property !== '/exceptions')][?(@property !== 'parameters')]"
+    then:
+      - field: responses
+        function: schema
+        functionOptions:
+          schema:
+            type: object
+            anyOf:
+              - required: ["200"]
+              - required: ["201"]
+              - required: ["202"]
+              - required: ["204"]
+              - required: ["206"]
+              - required: ["301"]
+              - required: ["302"]
+              - required: ["304"]

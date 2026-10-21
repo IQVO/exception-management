@@ -118,6 +118,29 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "500":
           $ref: "#/components/responses/InternalError"
+    post:
+      operationId: rejectCreateException
+      summary: Cases are never created over REST (always 405)
+      description: |
+        There is deliberately **no `POST /exceptions`**: every case opens
+        from a consumed fact (ADR 0001), and a repeated fact touches the open
+        case (occurrence count, `lastSeenAt`) instead of opening another.
+        The router answers `405 method-not-allowed` naming `GET` as the
+        allowed method, and no `Idempotency-Key` is demanded first.
+      tags: [Exceptions]
+      responses:
+        "405":
+          description: Case creation does not exist; every case comes from a consumed fact.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: https://errors.exception-management.warehouse-systems.dev/method-not-allowed
+                title: Method not allowed
+                status: 405
+                detail: there is deliberately no POST /exceptions; every case opens from a consumed fact (ADR 0001)
+                instance: /exceptions
 
   /exceptions/{caseId}:
     parameters:
@@ -573,6 +596,14 @@ components:
                 status: 409
                 detail: the Idempotency-Key was used with a different request body
                 instance: /exceptions/case-1/resolve
+            concurrentModification:
+              summary: Another request changed the case between read and write
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/concurrent-modification
+                title: The case was modified by another request; re-fetch the latest version and retry
+                status: 409
+                detail: re-fetch the case and retry the command
+                instance: /exceptions/case-1/triage
     InternalError:
       description: Unexpected server error.
       content:
