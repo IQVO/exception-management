@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","additionalProperties":false,"required":["assignee"],"properties":{"assignee":{"type":"string","minLength":1,"maxLength":64,"pattern":"\\S","description":"The operator id taking the case."}},"title":"AssignRequest"},"example":{"assignee":"op-marc"}}}}}

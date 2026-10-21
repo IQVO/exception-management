@@ -1,0 +1,71 @@
+/**
+ * CSS files with the .module.css suffix are treated as CSS modules
+ * and are locally scoped to the component — same scaffold as the other
+ * warehouse-systems docs sites.
+ */
+
+.heroBanner {
+  padding: 4rem 0 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-bottom: 0.5rem;
+}
+
+.heroTitle {
+  font-size: 3rem;
+}
+
+.heroSubtitle {
+  font-size: 1.4rem;
+  max-width: 46rem;
+  margin: 0.75rem auto 0;
+}
+
+.heroLead {
+  font-size: 1rem;
+  max-width: 40rem;
+  margin: 1.25rem auto 0;
+  opacity: 0.9;
+}
+
+.invariant {
+  padding: 2.5rem 0 3rem;
+  background: var(--ifm-color-emphasis-100);
+}
+
+.invariantQuote {
+  font-size: 1.15rem;
+  max-width: 40rem;
+  margin: 0 auto;
+  border-left: 4px solid var(--ifm-color-primary);
+  padding-left: 1.25rem;
+}
+
+.invariantCaption {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
