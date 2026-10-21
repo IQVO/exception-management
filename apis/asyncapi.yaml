@@ -1,0 +1,1095 @@
+asyncapi: 2.6.0
+
+info:
+  title: exception-management Domain Events
+  version: "1.0.0"
+  contact:
+    name: exception-management maintainers
+    url: https://github.com/IQVO/exception-management
+    email: exception-management@iqvo.example.com
+  license:
+    name: UNLICENSED
+  description: |
+    Event catalog for the **exception-management** bounded context (WES
+    subdomain): the Problem Solve lifecycle (ADR 0001, ADR 0002). Every case
+    is opened by a fact another context published; this service owns the
+    triage, assignment, SLA and resolution of that case, never the producer's
+    own state.
+
+    **Published.** The `ExceptionCase` aggregate raises six events and the
+    `ExceptionPolicy` aggregate one, all published to
+    `warehouse.exception-management.events` through a **transactional
+    outbox**: the aggregate row and its already-encoded events are written in
+    ONE database transaction and a relay drains them to Kafka (at-least-once;
+    the CloudEvents `id` is stored with the outbox row, so a retry republishes
+    the same `id`). Kafka key = case id (source type for the policy event), so
+    one case's history stays ordered on one partition.
+
+    **Consumed (ADR 0003).** Exception facts from six sibling contexts:
+    fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
+    `WeightDiscrepancyDetected`), wes-work-planning
+    (`BacklogThresholdBreached`), network-fulfillment
+    (`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),
+    order-management (`OrderRepromised`, correlation for auto-resolve only),
+    returns-processing (`UnexpectedReturnReceived`) and inventory-storage
+    (`DiscrepancyDetected`, `ItemUnlocated`). Each consumed message opens or
+    touches exactly one open case per dedup key (source type, source subject,
+    site); the source payload is frozen on the case, never re-fetched. The
+    consumed messages below are the producers' own contracts, restated here
+    and never imported.
+
+    **Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka
+    header `content-type: application/cloudevents+json; charset=UTF-8`.
+    `specversion`, `id`, `source` (`/warehouse/exception-management`), `type`,
+    `subject` (the case id; the source type for the policy event), `time`,
+    `datacontenttype` (`application/json`) and `dataschema`
+    (`urn:warehouse:exception-management:events:<EventName>:v1`) are all
+    required. Kafka key = the subject. Type =
+    `com.warehouse.wes.exception-management.<entity>.<EventName>`. A breaking
+    payload change is a new `.v2` type, never a mutation.
+
+servers:
+  production:
+    url: "{brokers}"
+    protocol: kafka
+    description: Fleet-shared Kafka broker (host supplied by the deployment environment).
+    variables:
+      brokers:
+        default: "kafka.warehouse-systems.internal:9092"
+
+defaultContentType: application/cloudevents+json
+
+tags:
+  - name: exception-management
+    description: The exception-management bounded context (WES subdomain).
+  - name: exceptioncase
+    description: Events raised by the ExceptionCase aggregate.
+  - name: exceptionpolicy
+    description: Events raised by the ExceptionPolicy aggregate.
+  - name: consumed
+    description: Events produced by sibling contexts that this service consumes (ADR 0003).
+
+channels:
+  warehouse.exception-management.events:
+    description: |
+      This service's integration topic. Written by the outbox relay; key = case
+      id (source type for the policy event); every message carries the
+      CloudEvents content-type header (plus the optional W3C `traceparent` of
+      the writing request). Dispatch on the full `type`, ignore unknown types,
+      dedupe on `id`.
+    subscribe:
+      operationId: receiveExceptionEvents
+      summary: Receive ExceptionCase and ExceptionPolicy events.
+      description: |
+        Subscribe to the case lifecycle. Route on the full `type`
+        (`com.warehouse.wes.exception-management.exceptioncase.<EventName>`).
+        `ExceptionOpened` announces a case (with its frozen source payload);
+        `ExceptionTriaged`, `ExceptionAssigned` and `ExceptionEscalated` are
+        operator/sweeper facts; `ExceptionResolved` and
+        `ExceptionAutoResolved` are terminal. `ExceptionPolicyDeclared` (key
+        and subject = the source type) announces a policy version.
+      tags:
+        - name: exceptioncase
+      message:
+        oneOf:
+          - $ref: "#/components/messages/ExceptionOpened"
+          - $ref: "#/components/messages/ExceptionTriaged"
+          - $ref: "#/components/messages/ExceptionAssigned"
+          - $ref: "#/components/messages/ExceptionEscalated"
+          - $ref: "#/components/messages/ExceptionResolved"
+          - $ref: "#/components/messages/ExceptionAutoResolved"
+          - $ref: "#/components/messages/ExceptionPolicyDeclared"
+
+  warehouse.fulfillment.events:
+    description: |
+      fulfillment-execution's integration topic. This service consumes
+      `TaskCPTMissed`, `PackageDiverted` and `WeightDiscrepancyDetected` under
+      a stable consumer group read from env `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`.
+      Every other type on the topic is ignored. `PackageDiverted` and
+      `WeightDiscrepancyDetected` arrive here only after the producer's
+      promotion PR (they are analytics-only today); the contract below is
+      pinned consumer-first.
+    publish:
+      operationId: consumeFulfillmentEvents
+      summary: Consume fulfillment-execution exception facts.
+      description: |
+        `TaskCPTMissed` is re-fired on every sweep tick by design: a repeat
+        does not open a second case, it touches the open one (occurrence + 1,
+        `lastSeenAt`). `order_ref` is WES's per-line work unit id
+        `{order_id}-line-{line_no}` (order-management ADR 0018); an
+        `OrderRepromised` for that order line closes the case through the
+        policy's auto-resolve rule. The CloudEvents `id` claim and the effect
+        commit in one transaction; the offset is committed afterwards (ADR 0003).
+      tags:
+        - name: consumed
+      message:
+        oneOf:
+          - $ref: "#/components/messages/TaskCPTMissed"
+          - $ref: "#/components/messages/PackageDiverted"
+          - $ref: "#/components/messages/WeightDiscrepancyDetected"
+
+  warehouse.work-planning.events:
+    description: |
+      wes-work-planning's integration topic. This service consumes ONLY
+      `BacklogThresholdBreached` under a stable consumer group read from env
+      `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`. Every other type is ignored.
+    publish:
+      operationId: consumeWorkPlanningEvents
+      summary: Consume the backlog alarm of a process path.
+      description: |
+        The published `data` carries only `path_id` (the producer's contract);
+        the case is one per path while the alarm keeps re-firing on every
+        observation sweep. Repeats touch the open case, they never open a
+        second one. The CloudEvents `id` claim and the effect commit in one
+        transaction.
+      tags:
+        - name: consumed
+      message:
+        $ref: "#/components/messages/BacklogThresholdBreached"
+
+  warehouse.network-fulfillment.events:
+    description: |
+      network-fulfillment's integration topic. This service consumes
+      `AcknowledgementDeadlineAtRisk` and `OrphanedHoldCancelled` under a
+      stable consumer group read from env `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`.
+      Every other type is ignored.
+    publish:
+      operationId: consumeNetworkFulfillmentEvents
+      summary: Consume network-order acknowledgement risk and orphaned holds.
+      description: |
+        Both events re-fire on every sweep pass for as long as the condition
+        holds: a repeat touches the open case (occurrence + 1, `lastSeenAt`),
+        never opens a second one. The CloudEvents `id` claim and the effect
+        commit in one transaction.
+      tags:
+        - name: consumed
+      message:
+        oneOf:
+          - $ref: "#/components/messages/AcknowledgementDeadlineAtRisk"
+          - $ref: "#/components/messages/OrphanedHoldCancelled"
+
+  warehouse.order-management.events:
+    description: |
+      order-management's integration topic. This service consumes ONLY
+      `OrderRepromised` under a stable consumer group read from env
+      `ORDER_CORRELATION_CONSUMER_GROUP`, and never as a case source: it is
+      the correlated fact that auto-resolves an open `TaskCPTMissed` case for
+      the same work unit (ADR 0002 auto-resolve rule). Every other type is
+      ignored.
+    publish:
+      operationId: consumeOrderCorrelationEvents
+      summary: Consume re-promises as the correlated fact of the auto-resolve rule.
+      description: |
+        `OrderRepromised` opens no case. The rule reverses the work-unit
+        formula (`{order_id}-line-{line_no}`) of the open case's source
+        `order_ref` and compares it with the repromised `order_id`; a match
+        within the rule's window auto-resolves the case, a mismatch is a
+        no-op (the case stays open — fails soft). The CloudEvents `id` claim
+        and the effect commit in one transaction.
+      tags:
+        - name: consumed
+      message:
+        $ref: "#/components/messages/OrderRepromised"
+
+  warehouse.returns-processing.events:
+    description: |
+      returns-processing's integration topic. This service consumes ONLY
+      `UnexpectedReturnReceived` under a stable consumer group read from env
+      `RETURNS_EXCEPTIONS_CONSUMER_GROUP` (the producer ships in wave 3; the
+      contract below is pinned consumer-first). Every other type is ignored.
+    publish:
+      operationId: consumeReturnsEvents
+      summary: Consume unexpected returns as problem-solve facts.
+      description: |
+        A return line that arrived with no authorization opens one case per
+        receipt line. The CloudEvents `id` claim and the effect commit in one
+        transaction.
+      tags:
+        - name: consumed
+      message:
+        $ref: "#/components/messages/UnexpectedReturnReceived"
+
+  warehouse.inventory.events:
+    description: |
+      inventory-storage's integration topic. This service consumes
+      `DiscrepancyDetected` and `ItemUnlocated` under a stable consumer group
+      read from env `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`. Both types arrive
+      here only after the producer's promotion PR (they are analytics-only
+      today); the contracts below are pinned consumer-first. Every other type
+      is ignored.
+    publish:
+      operationId: consumeInventoryEvents
+      summary: Consume count discrepancies and unlocated stock.
+      description: |
+        A short count (`DiscrepancyDetected`) and the stock it could not find
+        (`ItemUnlocated`) each open or touch their own case. The CloudEvents
+        `id` claim and the effect commit in one transaction.
+      tags:
+        - name: consumed
+      message:
+        oneOf:
+          - $ref: "#/components/messages/DiscrepancyDetected"
+          - $ref: "#/components/messages/ItemUnlocated"
+
+components:
+  messages:
+    ExceptionOpened:
+      name: ExceptionOpened
+      title: Exception opened
+      summary: A source fact created a case (first occurrence of the dedup key).
+      description: |
+        `type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionOpened`;
+        subject and key = the case id. `sla_due_at` is `opened_at` plus the
+        policy's `sla_minutes` for the source type. `source_payload` is the
+        frozen copy of the producer's `data` exactly as consumed: it never
+        changes after open and is never re-fetched. `site_id` is null when the
+        source event carries no site.
+      contentType: application/cloudevents+json
+      tags:
+        - name: exceptioncase
+      payload:
+        $ref: "#/components/schemas/ExceptionOpenedEvent"
+      examples:
+        - name: opened
+          summary: A TaskCPTMissed fact opened the case for task task-8a1f.
+          payload:
+            specversion: "1.0"
+            id: "3f2a9c1e-6b48-4d17-9a0f-8e5d2c7b4a11"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionOpened"
+            subject: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+            time: "2026-10-21T09:00:05Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionOpened:v1"
+            data:
+              case_id: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+              source_type: "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed"
+              source_subject: "task-8a1f"
+              site_id: null
+              severity: "HIGH"
+              queue: "cps-front"
+              opened_at: "2026-10-21T09:00:05Z"
+              sla_due_at: "2026-10-21T09:30:05Z"
+              source_event_id: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b"
+              source_payload:
+                task_id: "task-8a1f"
+                order_ref: "wu-8a1f"
+                task_type: "PICK"
+                cpt: "2026-09-30T14:55:00Z"
+
+    ExceptionTriaged:
+      name: ExceptionTriaged
+      title: Exception triaged
+      summary: Severity and queue were set (policy default or operator).
+      description: |
+        `type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionTriaged`;
+        subject and key = the case id. `actor` is the operator id or `system`.
+      contentType: application/cloudevents+json
+      tags:
+        - name: exceptioncase
+      payload:
+        $ref: "#/components/schemas/ExceptionTriagedEvent"
+      examples:
+        - name: triaged
+          summary: An operator moved the case to the inbound queue at high severity.
+          payload:
+            specversion: "1.0"
+            id: "5c4b2d8f-1a39-4e60-8b2d-7f6e5a4b3c22"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionTriaged"
+            subject: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+            time: "2026-10-21T09:05:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionTriaged:v1"
+            data:
+              case_id: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+              severity: "CRITICAL"
+              queue: "cps-inbound"
+              actor: "op-jane"
+              at: "2026-10-21T09:05:00Z"
+
+    ExceptionAssigned:
+      name: ExceptionAssigned
+      title: Exception assigned
+      summary: An owner took the case.
+      description: |
+        `type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionAssigned`;
+        subject and key = the case id. `assignee` is the operator id now
+        owning the case; `actor` is who performed the assignment.
+      contentType: application/cloudevents+json
+      tags:
+        - name: exceptioncase
+      payload:
+        $ref: "#/components/schemas/ExceptionAssignedEvent"
+      examples:
+        - name: assigned
+          summary: op-marc took the case.
+          payload:
+            specversion: "1.0"
+            id: "7e8f9a0b-2c4d-4e5f-8a9b-0c1d2e3f4a33"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionAssigned"
+            subject: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+            time: "2026-10-21T09:10:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionAssigned:v1"
+            data:
+              case_id: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+              assignee: "op-marc"
+              actor: "op-jane"
+              at: "2026-10-21T09:10:00Z"
+
+    ExceptionEscalated:
+      name: ExceptionEscalated
+      title: Exception escalated
+      summary: The SLA clock breached; the ESCALATED flag was set (work continues).
+      description: |
+        `type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionEscalated`;
+        subject and key = the case id. Raised once by the bounded SLA sweeper
+        when `now` passes `sla_due_at` while the case is not resolved. The
+        flag never blocks a transition and is not a state (ADR 0002).
+      contentType: application/cloudevents+json
+      tags:
+        - name: exceptioncase
+      payload:
+        $ref: "#/components/schemas/ExceptionEscalatedEvent"
+      examples:
+        - name: escalated
+          summary: The case breached its 30-minute SLA.
+          payload:
+            specversion: "1.0"
+            id: "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c44"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionEscalated"
+            subject: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+            time: "2026-10-21T09:30:06Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionEscalated:v1"
+            data:
+              case_id: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+              sla_due_at: "2026-10-21T09:30:05Z"
+              at: "2026-10-21T09:30:06Z"
+
+    ExceptionResolved:
+      name: ExceptionResolved
+      title: Exception resolved
+      summary: A resolution code and root cause were recorded; the case is terminal.
+      description: |
+        `type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionResolved`;
+        subject and key = the case id. `resolution_code` and `root_cause` are
+        mandatory; `note` is a free-form nullable remark. `actor` is the
+        operator id. After this the case accepts no command (409-class error).
+      contentType: application/cloudevents+json
+      tags:
+        - name: exceptioncase
+      payload:
+        $ref: "#/components/schemas/ExceptionResolvedEvent"
+      examples:
+        - name: resolved
+          summary: The task was re-run and the promise restored.
+          payload:
+            specversion: "1.0"
+            id: "1f2e3d4c-5b6a-4789-9abc-def012345678"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionResolved"
+            subject: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+            time: "2026-10-21T09:25:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionResolved:v1"
+            data:
+              case_id: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+              resolution_code: "WORK_COMPLETED"
+              root_cause: "OPERATOR_UNAVAILABLE"
+              note: null
+              actor: "op-marc"
+              at: "2026-10-21T09:25:00Z"
+
+    ExceptionAutoResolved:
+      name: ExceptionAutoResolved
+      title: Exception auto-resolved
+      summary: A declarative policy rule closed the case on a correlated fact.
+      description: |
+        `type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved`;
+        subject and key = the case id. `rule_id` names the policy's
+        auto-resolve rule that fired; `correlated_type` and
+        `correlated_event_id` are the full CloudEvents type and id of the
+        correlated fact that satisfied the rule (for example an
+        `OrderRepromised` for the same work unit within the window).
+      contentType: application/cloudevents+json
+      tags:
+        - name: exceptioncase
+      payload:
+        $ref: "#/components/schemas/ExceptionAutoResolvedEvent"
+      examples:
+        - name: autoResolved
+          summary: The repromised order closed the CPT-miss case.
+          payload:
+            specversion: "1.0"
+            id: "2e3f4a5b-6c7d-4899-a0bc-def012345678"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved"
+            subject: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+            time: "2026-10-21T09:20:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionAutoResolved:v1"
+            data:
+              case_id: "case-1d2e3f4a-5b6c-4789-9abc-def012345678"
+              rule_id: "cpt-missed-repromised-v1"
+              correlated_type: "com.warehouse.wes.order-management.order.OrderRepromised"
+              correlated_event_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+              at: "2026-10-21T09:20:00Z"
+
+    ExceptionPolicyDeclared:
+      name: ExceptionPolicyDeclared
+      title: Exception policy declared
+      summary: A new version of the handling policy of a source type.
+      description: |
+        `type` = `com.warehouse.wes.exception-management.exceptionpolicy.ExceptionPolicyDeclared`;
+        subject and key = the source type (the full CloudEvents type string of
+        the consumed source event the policy governs). Policies are
+        append-only versions; the new version governs cases opened afterwards.
+        `auto_resolve` is null when the source type has no auto-resolve rule.
+      contentType: application/cloudevents+json
+      tags:
+        - name: exceptionpolicy
+      payload:
+        $ref: "#/components/schemas/ExceptionPolicyDeclaredEvent"
+      examples:
+        - name: declared
+          summary: TaskCPTMissed defaults to HIGH, cps-front, 30-minute SLA, repromise auto-resolve.
+          payload:
+            specversion: "1.0"
+            id: "4a5b6c7d-8e9f-4a0b-8c1d-2e3f4a5b6c55"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptionpolicy.ExceptionPolicyDeclared"
+            subject: "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed"
+            time: "2026-10-21T08:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionPolicyDeclared:v1"
+            data:
+              source_type: "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed"
+              version: 1
+              severity: "HIGH"
+              queue: "cps-front"
+              sla_minutes: 30
+              auto_resolve:
+                on_type: "com.warehouse.wes.order-management.order.OrderRepromised"
+                within_minutes: 60
+
+    TaskCPTMissed:
+      name: TaskCPTMissed
+      title: TaskCPTMissed (consumed, fulfillment-execution)
+      summary: A task is still open past its CPT deadline.
+      description: |
+        `type` = `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed`,
+        source `/warehouse/fulfillment-execution`, dataschema
+        `urn:warehouse:fulfillment-execution:events:TaskCPTMissed:v1`. Subject
+        and Kafka key = the task id. Re-fired on every sweep pass while the
+        task stays open: every repeat after the first touches the open case
+        (occurrence + 1, `lastSeenAt`), never opens a second one.
+        `order_ref` is WES's work unit id `{order_id}-line-{line_no}`;
+        `task_type` is omitted when unknown.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/TaskCPTMissedEvent"
+      examples:
+        - name: taskCPTMissed
+          summary: A PICK task is past its 14:55 CPT.
+          payload:
+            specversion: "1.0"
+            id: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b"
+            source: "/warehouse/fulfillment-execution"
+            type: "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed"
+            subject: "task-8a1f"
+            time: "2026-09-30T15:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:fulfillment-execution:events:TaskCPTMissed:v1"
+            data:
+              task_id: "task-8a1f"
+              order_ref: "wu-8a1f"
+              task_type: "PICK"
+              cpt: "2026-09-30T14:55:00Z"
+
+    PackageDiverted:
+      name: PackageDiverted
+      title: PackageDiverted (consumed, fulfillment-execution)
+      summary: A package was diverted off the standard path.
+      description: |
+        PENDING PRODUCER PROMOTION P1: fulfillment-execution publishes this
+        type on its analytics topic only today; it arrives on
+        `warehouse.fulfillment.events` (dataschema
+        `urn:warehouse:fulfillment-execution:events:PackageDiverted:v1`) once
+        the producer's promotion PR merges. `type` =
+        `com.warehouse.wes.fulfillment-execution.package.PackageDiverted`,
+        source `/warehouse/fulfillment-execution`. Subject and Kafka key = the
+        package id.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/PackageDivertedEvent"
+      examples:
+        - name: packageDiverted
+          summary: Package p1 left the standard path.
+          payload:
+            specversion: "1.0"
+            id: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4c"
+            source: "/warehouse/fulfillment-execution"
+            type: "com.warehouse.wes.fulfillment-execution.package.PackageDiverted"
+            subject: "p1"
+            time: "2026-09-30T15:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:fulfillment-execution:events:PackageDiverted:v1"
+            data:
+              package_id: "p1"
+
+    WeightDiscrepancyDetected:
+      name: WeightDiscrepancyDetected
+      title: WeightDiscrepancyDetected (consumed, fulfillment-execution)
+      summary: SLAM found the package weight out of tolerance.
+      description: |
+        PENDING PRODUCER PROMOTION P1: analytics-only today; arrives on
+        `warehouse.fulfillment.events` (dataschema
+        `urn:warehouse:fulfillment-execution:events:WeightDiscrepancyDetected:v1`)
+        once the producer's promotion PR merges. `type` =
+        `com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected`,
+        source `/warehouse/fulfillment-execution`. Subject and Kafka key = the
+        package id.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/WeightDiscrepancyDetectedEvent"
+      examples:
+        - name: weightDiscrepancy
+          summary: The package weighed 1200 g against an expected 1000 g.
+          payload:
+            specversion: "1.0"
+            id: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4d"
+            source: "/warehouse/fulfillment-execution"
+            type: "com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected"
+            subject: "p1"
+            time: "2026-09-30T15:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:fulfillment-execution:events:WeightDiscrepancyDetected:v1"
+            data:
+              package_id: "p1"
+              expected_g: 1000
+              actual_g: 1200
+
+    BacklogThresholdBreached:
+      name: BacklogThresholdBreached
+      title: BacklogThresholdBreached (consumed, wes-work-planning)
+      summary: A path's backlog depth crossed its alarm threshold.
+      description: |
+        `type` = `com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached`,
+        source `/warehouse/wes-work-planning`, dataschema
+        `urn:warehouse:wes-work-planning:events:BacklogThresholdBreached:v1`.
+        Subject and Kafka key = the path id. The published `data` carries ONLY
+        `path_id` (the producer's contract); consumers wanting the depth and
+        rate numbers read the producer's telemetry projection instead. The
+        signal re-fires on every observation sweep: repeats touch the open
+        case, never open a second one.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/BacklogThresholdBreachedEvent"
+      examples:
+        - name: backlogThresholdBreached
+          summary: The pack-singles buffer went over its alarm threshold.
+          payload:
+            specversion: "1.0"
+            id: "9c4a1e60-8b72-4d31-a5f9-7e2c3b0d6f18"
+            source: "/warehouse/wes-work-planning"
+            type: "com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached"
+            subject: "pack-singles"
+            time: "2026-08-21T22:25:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:wes-work-planning:events:BacklogThresholdBreached:v1"
+            data:
+              path_id: "pack-singles"
+
+    AcknowledgementDeadlineAtRisk:
+      name: AcknowledgementDeadlineAtRisk
+      title: AcknowledgementDeadlineAtRisk (consumed, network-fulfillment)
+      summary: A network order's acknowledgement window closed with no answer.
+      description: |
+        `type` = `com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk`,
+        source `/warehouse/network-fulfillment`, dataschema
+        `urn:warehouse:network-fulfillment:events:AcknowledgementDeadlineAtRisk:v1`.
+        Subject and Kafka key = the network order reference (`networkRef`). A
+        reported fact that re-fires on every sweep pass while the order is
+        still NEW past `acknowledgeBy`: repeats touch the open case, never
+        open a second one.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/AcknowledgementDeadlineAtRiskEvent"
+      examples:
+        - name: acknowledgementDeadlineAtRisk
+          summary: Network order po-1's acknowledgement window closed unanswered.
+          payload:
+            specversion: "1.0"
+            id: "1a2b3c4d-5e6f-4788-9900-aabbccddeeff"
+            source: "/warehouse/network-fulfillment"
+            type: "com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk"
+            subject: "po-1"
+            time: "2026-09-24T08:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:network-fulfillment:events:AcknowledgementDeadlineAtRisk:v1"
+            data:
+              networkRef: "po-1"
+              siteId: "site-1"
+              acknowledgeBy: "2026-09-24T08:00:00Z"
+              at: "2026-09-24T08:00:00Z"
+
+    OrphanedHoldCancelled:
+      name: OrphanedHoldCancelled
+      title: OrphanedHoldCancelled (consumed, network-fulfillment)
+      summary: A hold order-management made for demand nobody decided was cancelled.
+      description: |
+        `type` = `com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled`,
+        source `/warehouse/network-fulfillment`, dataschema
+        `urn:warehouse:network-fulfillment:events:OrphanedHoldCancelled:v1`.
+        Subject and Kafka key = the network order reference (`networkRef`).
+        `answer` is what order-management said to the cancel (`CANCELLED` or
+        `NOT_FOUND`); `localOrderId` is the held order-management order.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/OrphanedHoldCancelledEvent"
+      examples:
+        - name: orphanedHoldCancelled
+          summary: The hold behind network order po-1 was cancelled after its window closed.
+          payload:
+            specversion: "1.0"
+            id: "2b3c4d5e-6f70-4899-8011-bbccddeeff00"
+            source: "/warehouse/network-fulfillment"
+            type: "com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled"
+            subject: "po-1"
+            time: "2026-09-23T08:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:network-fulfillment:events:OrphanedHoldCancelled:v1"
+            data:
+              networkRef: "po-1"
+              siteId: "site-1"
+              localOrderId: "ord-1"
+              acknowledgeBy: "2026-09-23T06:00:00Z"
+              answer: "CANCELLED"
+              at: "2026-09-23T08:00:00Z"
+
+    OrderRepromised:
+      name: OrderRepromised
+      title: OrderRepromised (consumed, order-management)
+      summary: A missed CPT pushed the order's promise to a later cutoff.
+      description: |
+        `type` = `com.warehouse.wes.order-management.order.OrderRepromised`,
+        source `/warehouse/order-management`, dataschema
+        `urn:warehouse:order-management:events:OrderRepromised:v1`. Subject and
+        Kafka key = the order id. Never a case source: it is the correlated
+        fact of the auto-resolve rule. The rule reverses the work-unit formula
+        of the open case's source `order_ref` and compares it with
+        `order_id`; no match is a no-op (the case stays open).
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/OrderRepromisedEvent"
+      examples:
+        - name: orderRepromised
+          summary: The promise moved from the 12:00 to the 18:00 cutoff.
+          payload:
+            specversion: "1.0"
+            id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+            source: "/warehouse/order-management"
+            type: "com.warehouse.wes.order-management.order.OrderRepromised"
+            subject: "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2"
+            time: "2026-09-14T12:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:order-management:events:OrderRepromised:v1"
+            data:
+              order_id: "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2"
+              cpt_id_old: "sp1-1200"
+              cpt_id_new: "sp1-1800"
+              reason: "TaskCPTMissed"
+
+    UnexpectedReturnReceived:
+      name: UnexpectedReturnReceived
+      title: UnexpectedReturnReceived (consumed, returns-processing)
+      summary: A return line arrived with no authorization.
+      description: |
+        PENDING PRODUCER (wave 3): returns-processing ships this type on
+        `warehouse.returns-processing.events`; the contract is pinned here
+        consumer-first from the fleet plan. `type` =
+        `com.warehouse.wms.returns-processing.returnreceipt.UnexpectedReturnReceived`,
+        source `/warehouse/returns-processing`, dataschema
+        `urn:warehouse:returns-processing:events:UnexpectedReturnReceived:v1`.
+        Subject and Kafka key = the receipt id. One case per receipt line;
+        repeats touch the open case.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/UnexpectedReturnReceivedEvent"
+      examples:
+        - name: unexpectedReturn
+          summary: Two units of SKU-9 arrived at site-1 with no RMA.
+          payload:
+            specversion: "1.0"
+            id: "8d7c6b5a-4f3e-4d2c-9b1a-0f9e8d7c6b5e"
+            source: "/warehouse/returns-processing"
+            type: "com.warehouse.wms.returns-processing.returnreceipt.UnexpectedReturnReceived"
+            subject: "rcpt-31c7"
+            time: "2026-10-21T10:12:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:returns-processing:events:UnexpectedReturnReceived:v1"
+            data:
+              receipt_id: "rcpt-31c7"
+              line_no: 1
+              sku: "SKU-9"
+              quantity: 2
+              site_id: "site-1"
+              received_at: "2026-10-21T10:12:00Z"
+
+    DiscrepancyDetected:
+      name: DiscrepancyDetected
+      title: DiscrepancyDetected (consumed, inventory-storage)
+      summary: A cycle count found the bin did not match system records.
+      description: |
+        PENDING PRODUCER PROMOTION P1: analytics-only today; arrives on
+        `warehouse.inventory.events` (dataschema
+        `urn:warehouse:inventory-storage:events:DiscrepancyDetected:v1`) once
+        the producer's promotion PR merges. `type` =
+        `com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected`, source
+        `/warehouse/inventory-storage`. Subject and Kafka key = the bin id.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/DiscrepancyDetectedEvent"
+      examples:
+        - name: binCountShort
+          summary: Bin A-12-3 counted at 47 units against a system record of 50.
+          payload:
+            specversion: "1.0"
+            id: "c2a90b76-8e34-4f51-9d07-4b6e1c8a37f9"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected"
+            subject: "A-12-3"
+            time: "2026-08-21T23:00:01Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:DiscrepancyDetected:v1"
+            data:
+              bin_id: "A-12-3"
+              counted: 47
+              system: 50
+
+    ItemUnlocated:
+      name: ItemUnlocated
+      title: ItemUnlocated (consumed, inventory-storage)
+      summary: A physical item's bin is no longer known; the stock is lost.
+      description: |
+        PENDING PRODUCER PROMOTION P1: analytics-only today; arrives on
+        `warehouse.inventory.events` (dataschema
+        `urn:warehouse:inventory-storage:events:ItemUnlocated:v1`) once the
+        producer's promotion PR merges. `type` =
+        `com.warehouse.wms.inventory-storage.stock.ItemUnlocated`, source
+        `/warehouse/inventory-storage`. Subject = the stock unit id, Kafka key
+        = the SKU.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/ItemUnlocatedEvent"
+      examples:
+        - name: shortCountUnlocatedStock
+          summary: Three units of SKU-1001 could not be found in bin A-12-3.
+          payload:
+            specversion: "1.0"
+            id: "7e0d5a83-4f19-42b7-a3c6-8b1e9d2f0c45"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.stock.ItemUnlocated"
+            subject: "su-7781"
+            time: "2026-08-21T23:00:02Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:ItemUnlocated:v1"
+            data:
+              stock_unit_id: "su-7781"
+              sku: "SKU-1001"
+              bin_id: "A-12-3"
+              quantity: 3
+
+  schemas:
+    CloudEventEnvelope:
+      type: object
+      required: [specversion, id, source, type, subject, time, datacontenttype, dataschema, data]
+      properties:
+        specversion: { type: string, const: "1.0" }
+        id: { type: string, format: uuid }
+        source: { type: string }
+        type: { type: string }
+        subject: { type: string, description: The aggregate instance id (the case id for case events; the source type for the policy event). }
+        time: { type: string, format: date-time }
+        datacontenttype: { type: string, const: application/json }
+        dataschema: { type: string }
+
+    ExceptionOpenedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [case_id, source_type, source_subject, site_id, severity, queue, opened_at, sla_due_at, source_event_id, source_payload]
+              properties:
+                case_id: { type: string }
+                source_type: { type: string, description: The full CloudEvents type of the consumed source fact. }
+                source_subject: { type: string, description: The subject of the consumed source fact (its aggregate id). }
+                site_id: { type: string, nullable: true, description: The site carried by the source fact; null when it has none. }
+                severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL], description: The policy default at open. }
+                queue: { type: string, description: The problem-solve queue the policy routes the case to. }
+                opened_at: { type: string, format: date-time }
+                sla_due_at: { type: string, format: date-time, description: "opened_at + the policy's sla_minutes." }
+                source_event_id: { type: string, description: The CloudEvents id of the source fact that opened the case. }
+                source_payload: { type: object, description: Frozen copy of the source fact's data; never changes after open. }
+
+    ExceptionTriagedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [case_id, severity, queue, actor, at]
+              properties:
+                case_id: { type: string }
+                severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+                queue: { type: string }
+                actor: { type: string, description: "The operator id or `system`." }
+                at: { type: string, format: date-time }
+
+    ExceptionAssignedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [case_id, assignee, actor, at]
+              properties:
+                case_id: { type: string }
+                assignee: { type: string, description: The operator id now owning the case. }
+                actor: { type: string, description: "The operator id or `system` that performed the assignment." }
+                at: { type: string, format: date-time }
+
+    ExceptionEscalatedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [case_id, sla_due_at, at]
+              properties:
+                case_id: { type: string }
+                sla_due_at: { type: string, format: date-time }
+                at: { type: string, format: date-time }
+
+    ExceptionResolvedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [case_id, resolution_code, root_cause, note, actor, at]
+              properties:
+                case_id: { type: string }
+                resolution_code: { type: string, description: What was done about the case (a code, not prose). }
+                root_cause: { type: string, description: Why it happened (a code, not prose). }
+                note: { type: string, nullable: true, description: Free-form remark; null when none. }
+                actor: { type: string, description: The operator id that resolved the case. }
+                at: { type: string, format: date-time }
+
+    ExceptionAutoResolvedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [case_id, rule_id, correlated_type, correlated_event_id, at]
+              properties:
+                case_id: { type: string }
+                rule_id: { type: string, description: The policy's auto-resolve rule that fired. }
+                correlated_type: { type: string, description: The full CloudEvents type of the correlated fact. }
+                correlated_event_id: { type: string, description: The CloudEvents id of the correlated fact. }
+                at: { type: string, format: date-time }
+
+    ExceptionPolicyDeclaredEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [source_type, version, severity, queue, sla_minutes, auto_resolve]
+              properties:
+                source_type: { type: string, description: The full CloudEvents type of the governed source fact. }
+                version: { type: integer, minimum: 1, description: "Append-only: 1 for the first declaration, +1 per accepted change." }
+                severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+                queue: { type: string }
+                sla_minutes: { type: integer, minimum: 1, description: The SLA budget of cases opened under this policy. }
+                auto_resolve:
+                  type: object
+                  nullable: true
+                  allOf:
+                    - $ref: "#/components/schemas/AutoResolveRule"
+
+    AutoResolveRule:
+      type: object
+      required: [on_type, within_minutes]
+      properties:
+        on_type: { type: string, description: "The full CloudEvents type of the correlated fact that closes the case (e.g. OrderRepromised)." }
+        within_minutes: { type: integer, minimum: 1, description: The correlated fact counts only within this many minutes of the case's last occurrence. }
+
+    TaskCPTMissedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [task_id, order_ref, cpt]
+              properties:
+                task_id: { type: string, description: The task still open past its CPT. }
+                order_ref: { type: string, description: "The work unit id `{order_id}-line-{line_no}`." }
+                task_type: { type: string, enum: [PICK, PACK, SLAM, REBIN, DISPATCH, ARRIVAL], description: Omitted when unknown. }
+                cpt: { type: string, format: date-time, description: The missed CPT deadline. }
+
+    PackageDivertedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [package_id]
+              properties:
+                package_id: { type: string }
+
+    WeightDiscrepancyDetectedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [package_id, expected_g, actual_g]
+              properties:
+                package_id: { type: string }
+                expected_g: { type: number, format: double }
+                actual_g: { type: number, format: double }
+
+    BacklogThresholdBreachedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [path_id]
+              properties:
+                path_id: { type: string, description: The process path whose backlog crossed its alarm threshold. }
+
+    AcknowledgementDeadlineAtRiskEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [networkRef, siteId, acknowledgeBy, at]
+              properties:
+                networkRef: { type: string }
+                siteId: { type: string }
+                acknowledgeBy: { type: string, format: date-time }
+                at: { type: string, format: date-time }
+
+    OrphanedHoldCancelledEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [networkRef, siteId, localOrderId, acknowledgeBy, answer, at]
+              properties:
+                networkRef: { type: string }
+                siteId: { type: string }
+                localOrderId: { type: string }
+                acknowledgeBy: { type: string, format: date-time }
+                answer: { type: string, enum: [CANCELLED, NOT_FOUND] }
+                at: { type: string, format: date-time }
+
+    OrderRepromisedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [order_id, cpt_id_old, cpt_id_new, reason]
+              properties:
+                order_id: { type: string }
+                cpt_id_old: { type: string }
+                cpt_id_new: { type: string }
+                reason: { type: string }
+
+    UnexpectedReturnReceivedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [receipt_id, line_no, sku, quantity, site_id, received_at]
+              properties:
+                receipt_id: { type: string }
+                line_no: { type: integer, minimum: 1 }
+                sku: { type: string }
+                quantity: { type: integer, minimum: 1 }
+                site_id: { type: string }
+                received_at: { type: string, format: date-time }
+
+    DiscrepancyDetectedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [bin_id, counted, system]
+              properties:
+                bin_id: { type: string, description: The bin whose count did not match system records. }
+                counted: { type: integer, minimum: 0, description: Quantity physically counted in the bin. }
+                system: { type: integer, minimum: 0, description: Quantity the system believed was in the bin. }
+
+    ItemUnlocatedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [stock_unit_id, sku, bin_id, quantity]
+              properties:
+                stock_unit_id: { type: string, description: The StockUnit flagged Unlocated. }
+                sku: { type: string }
+                bin_id: { type: string, description: The bin the stock was believed to be in. }
+                quantity: { type: integer, minimum: 1, description: Quantity that could not be accounted for. }

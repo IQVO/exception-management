@@ -28,7 +28,7 @@ Read models (projections, never aggregates): open cases by queue, SLA report, ro
 - `ExceptionAutoResolved` — a policy rule closed it on a correlated fact.
 - `ExceptionPolicyDeclared` — new policy version.
 
-## Key use cases (`internal/application/usecases`)
+## Key use cases (application layer, a later step of the service build)
 
 - `OpenOrTouchException` — consumer-driven, idempotent on the CloudEvents `id`; opens or touches by dedup key.
 - `TriageException`, `AssignException`, `ResolveException` — operator commands (REST).

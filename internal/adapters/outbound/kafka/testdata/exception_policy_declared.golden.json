@@ -1,0 +1,21 @@
+{
+  "specversion": "1.0",
+  "id": "d4e5f6a7-b8c9-4d0e-8f2a-3b4c5d6e7f80",
+  "source": "/warehouse/exception-management",
+  "type": "com.warehouse.wes.exception-management.exceptionpolicy.ExceptionPolicyDeclared",
+  "subject": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
+  "time": "2026-10-21T09:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:exception-management:events:ExceptionPolicyDeclared:v1",
+  "data": {
+    "source_type": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
+    "version": 2,
+    "severity": "HIGH",
+    "queue": "ps-main",
+    "sla_minutes": 30,
+    "auto_resolve": {
+      "on_type": "com.warehouse.wes.order-management.order.OrderRepromised",
+      "within_minutes": 10
+    }
+  }
+}

@@ -27,5 +27,13 @@ unleash:
     # differs. See HARNESS.md's mutation-testing section for the
     # tagless-switch-under-reports pitfall before assuming a low number
     # means missing tests.
-    efficacy: "0"
-    mutant-coverage: "0"
+    #
+    # Measured 2026-10-21 (gremlins v0.6.0), per package — all survivors
+    # killed before pinning:
+    #   internal/domain/exceptioncase   efficacy 100.00%  mutant-coverage 100.00%  (51 killed / 0 lived)
+    #   internal/domain/exceptionpolicy efficacy 100.00%  mutant-coverage 100.00%  (29 killed / 0 lived)
+    #   internal/domain/shared          efficacy 100.00%  mutant-coverage 100.00%  (36 killed / 0 lived)
+    # The gate sits 5 points under the floor so a stray equivalent mutant
+    # fails the build loudly instead of silently eroding the floor.
+    efficacy: "95"
+    mutant-coverage: "95"

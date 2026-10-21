@@ -1,0 +1,793 @@
+openapi: 3.0.3
+info:
+  title: Exception Management API
+  version: 1.0.0
+  description: |
+    The WES-tier owner of the **Problem Solve** lifecycle in the
+    warehouse-systems platform (ADR 0001, ADR 0002). Every case starts from a
+    fact another context published (a missed CPT, a breached backlog
+    threshold, an at-risk acknowledgement, a count discrepancy, an unexpected
+    return); this API is where operators triage, assign and resolve those
+    cases, and where the handling policy per source type is declared.
+
+    There is deliberately **no `POST /exceptions`**: a case is always a
+    consumed fact, and a repeated fact touches the open case (occurrence
+    count, `lastSeenAt`) instead of opening another. `status` runs
+    `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`; `RESOLVED` requires a
+    resolution code and is terminal; `escalated` is a flag set by the SLA
+    sweeper, never a state and never a blocker.
+
+    Events are published as CloudEvents on
+    `warehouse.exception-management.events` through a transactional outbox
+    (see `apis/asyncapi.yaml`, ADR 0004). Errors are RFC 7807 problem
+    documents with
+    `type = https://errors.exception-management.warehouse-systems.dev/<slug>`.
+    There is no authentication layer (fleet decision 2026-09-11).
+  contact:
+    name: exception-management maintainers
+    url: https://github.com/IQVO/exception-management
+  license:
+    name: UNLICENSED
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://localhost:8000/api/exception-management
+    description: Local kind cluster through Kong
+tags:
+  - name: Exceptions
+    description: "The Problem Solve casework: triage, assign, resolve."
+  - name: Exception policies
+    description: "The per-source-type handling policy: severity, queue, SLA, auto-resolve."
+  - name: Health
+    description: Liveness, readiness and metrics probes.
+
+paths:
+  /exceptions:
+    get:
+      operationId: listExceptions
+      summary: List exception cases
+      description: |
+        Lists cases, newest first. An empty result is `200` with `[]`, never
+        a 404. `status`, `queue`, `site` and `sourceType` narrow the list;
+        `sourceType` is the full CloudEvents type of the source fact. Without
+        a `status` filter the list returns every open AND resolved case
+        matching the other filters (resolve activity is part of the record).
+      tags: [Exceptions]
+      parameters:
+        - name: status
+          in: query
+          description: Only cases in this status.
+          schema:
+            $ref: "#/components/schemas/CaseStatus"
+        - name: queue
+          in: query
+          description: Only cases in this problem-solve queue.
+          schema:
+            type: string
+        - name: site
+          in: query
+          description: Only cases of this site.
+          schema:
+            type: string
+        - name: sourceType
+          in: query
+          description: The full CloudEvents type of the source fact.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The matching cases (an empty list, never a 404).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExceptionCase"
+              example:
+                - caseId: case-1d2e3f4a-5b6c-4789-9abc-def012345678
+                  dedupKey:
+                    sourceType: com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
+                    sourceSubject: task-8a1f
+                    siteId: null
+                  status: OPEN
+                  severity: HIGH
+                  queue: cps-front
+                  occurrenceCount: 3
+                  escalated: false
+                  openedAt: "2026-10-21T09:00:05Z"
+                  lastSeenAt: "2026-10-21T09:20:05Z"
+                  slaDueAt: "2026-10-21T09:30:05Z"
+                  sourceEventId: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b"
+                  sourcePayload:
+                    task_id: task-8a1f
+                    order_ref: wu-8a1f
+                    task_type: PICK
+                    cpt: "2026-09-30T14:55:00Z"
+                  auditTrail:
+                    - action: OPENED
+                      actor: system
+                      at: "2026-10-21T09:00:05Z"
+                    - action: TOUCHED
+                      actor: system
+                      at: "2026-10-21T09:10:05Z"
+                    - action: TOUCHED
+                      actor: system
+                      at: "2026-10-21T09:20:05Z"
+                  version: 1
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: rejectCreateException
+      summary: Cases are never created over REST (always 405)
+      description: |
+        There is deliberately **no `POST /exceptions`**: every case opens
+        from a consumed fact (ADR 0001), and a repeated fact touches the open
+        case (occurrence count, `lastSeenAt`) instead of opening another.
+        The router answers `405 method-not-allowed` naming `GET` as the
+        allowed method, and no `Idempotency-Key` is demanded first.
+      tags: [Exceptions]
+      responses:
+        "405":
+          description: Case creation does not exist; every case comes from a consumed fact.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: https://errors.exception-management.warehouse-systems.dev/method-not-allowed
+                title: Method not allowed
+                status: 405
+                detail: there is deliberately no POST /exceptions; every case opens from a consumed fact (ADR 0001)
+                instance: /exceptions
+
+  /exceptions/{caseId}:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      operationId: getException
+      summary: Get an exception case
+      description: |
+        Returns the case with its frozen source payload, its SLA clock, its
+        occurrence count, its assignee and resolution once they exist, and the
+        audit trail (one entry per transition, each with its actor).
+      tags: [Exceptions]
+      responses:
+        "200":
+          description: The case.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExceptionCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /exceptions/{caseId}/triage:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: triageException
+      summary: Triage a case
+      description: |
+        Sets or changes the severity and queue of a case that is not yet
+        resolved, and moves an `OPEN` case to `TRIAGED`. Requires an
+        `Idempotency-Key`; replaying the same key and body returns the stored
+        response. Publishes `ExceptionTriaged`.
+      tags: [Exceptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TriageRequest"
+            example:
+              severity: CRITICAL
+              queue: cps-inbound
+      responses:
+        "200":
+          description: The case is now triaged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExceptionCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /exceptions/{caseId}/assign:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: assignException
+      summary: Assign a case
+      description: |
+        Gives the case an owner (an operator id) and moves it to `ASSIGNED`.
+        Reassigning is allowed while the case is not resolved. Requires an
+        `Idempotency-Key`. Publishes `ExceptionAssigned`.
+      tags: [Exceptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignRequest"
+            example:
+              assignee: op-marc
+      responses:
+        "200":
+          description: The case is now assigned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExceptionCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /exceptions/{caseId}/resolve:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: resolveException
+      summary: Resolve a case
+      description: |
+        Records the resolution code and the root cause and moves the case to
+        `RESOLVED`, its terminal state. `note` is optional. Resolving an
+        already-resolved case is a 409 `case-already-resolved`; any later
+        command on it is too. Requires an `Idempotency-Key`. Publishes
+        `ExceptionResolved`.
+      tags: [Exceptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveRequest"
+            example:
+              resolutionCode: WORK_COMPLETED
+              rootCause: OPERATOR_UNAVAILABLE
+      responses:
+        "200":
+          description: The case is resolved (terminal).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExceptionCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /exception-policies:
+    get:
+      operationId: listExceptionPolicies
+      summary: List the handling policies
+      description: |
+        Lists the current policy version of every declared source type,
+        ordered by source type. An empty list is `200` with `[]`.
+      tags: [Exception policies]
+      responses:
+        "200":
+          description: The declared policies.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExceptionPolicy"
+              example:
+                - sourceType: com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
+                  version: 1
+                  severity: HIGH
+                  queue: cps-front
+                  slaMinutes: 30
+                  autoResolve:
+                    onType: com.warehouse.wes.order-management.order.OrderRepromised
+                    withinMinutes: 60
+                  declaredAt: "2026-10-21T08:00:00Z"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /exception-policies/{sourceType}:
+    parameters:
+      - $ref: "#/components/parameters/SourceType"
+    put:
+      operationId: declareExceptionPolicy
+      summary: Declare a new version of a handling policy
+      description: |
+        Declares the handling policy of a source type at the next version
+        (versions are append-only: the first declaration is version 1, every
+        accepted declaration after that is +1). `sourceType` is the full
+        CloudEvents type of the governed source fact and must match a source
+        this service consumes. The new version governs cases opened after the
+        declaration; open cases keep the severity, queue and SLA they were
+        opened with. `autoResolve` is omitted or null when the source type has
+        no auto-resolve rule. Requires an `Idempotency-Key`. Publishes
+        `ExceptionPolicyDeclared`.
+      tags: [Exception policies]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeclarePolicyRequest"
+            example:
+              severity: HIGH
+              queue: cps-front
+              slaMinutes: 30
+              autoResolve:
+                onType: com.warehouse.wes.order-management.order.OrderRepromised
+                withinMinutes: 60
+      responses:
+        "201":
+          description: The policy version is declared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExceptionPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /healthz:
+    get:
+      operationId: healthz
+      summary: Liveness probe
+      description: 200 while the process is running.
+      tags: [Health]
+      responses:
+        "200":
+          description: Alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+
+  /readyz:
+    get:
+      operationId: readyz
+      summary: Readiness probe
+      description: |
+        200 when the service can serve traffic. 503 while draining for
+        shutdown (`{"status":"not_ready"}`) or while Postgres or the Kafka
+        broker is unreachable (problem `dependency-unavailable`). Kafka
+        readiness is reachability only (a broker answers a metadata request
+        with an empty topic list); a missing topic never makes the service
+        unready.
+      tags: [Health]
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        "503":
+          description: Not ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: https://errors.exception-management.warehouse-systems.dev/dependency-unavailable
+                title: A runtime dependency is unavailable
+                status: 503
+                detail: "not ready: kafka"
+                instance: /readyz
+
+  /metrics:
+    get:
+      operationId: metrics
+      summary: Prometheus metrics
+      description: The Prometheus scrape endpoint (text exposition format).
+      tags: [Health]
+      responses:
+        "200":
+          description: The metrics of the process.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  parameters:
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: The case id (`case-` followed by a unique suffix, at most 64 characters).
+      schema:
+        type: string
+        minLength: 6
+        maxLength: 64
+        pattern: "^case-[^\\s/]+$"
+      example: case-1d2e3f4a-5b6c-4789-9abc-def012345678
+    SourceType:
+      name: sourceType
+      in: path
+      required: true
+      description: |
+        The full CloudEvents type of the governed source fact, URL-encoded
+        (its dots and colons are significant), e.g.
+        `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed`.
+      schema:
+        type: string
+        minLength: 5
+        maxLength: 200
+        pattern: "^com\\.warehouse\\.(wms|wes)\\.[a-z][a-z-]*\\.[a-z][a-z-]*\\.[A-Za-z0-9.]+$"
+      example: com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Caller-generated unique key (a UUID per logical submit) that makes a
+        retried request safe. Required on every POST and PUT; answered with
+        400 `idempotency-key-required` when absent. A replay with the same
+        key and the same body returns the stored response; the same key with
+        a different body is a 409 `idempotency-key-reused`.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+  responses:
+    BadRequest:
+      description: Malformed JSON body, an unknown field, an invalid path, query or header parameter, or a NUL byte in a body.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            malformedBody:
+              summary: Malformed JSON body or NUL byte
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/malformed-request-body
+                title: Malformed request body
+                status: 400
+                detail: request body is not valid JSON for this operation
+                instance: /exceptions/case-1/resolve
+            invalidSeverity:
+              summary: Unknown severity
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-severity
+                title: Severity is invalid
+                status: 400
+                detail: "severity must be one of LOW, MEDIUM, HIGH, CRITICAL"
+                instance: /exceptions/case-1/triage
+            invalidQueue:
+              summary: Blank queue
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-queue
+                title: Queue is invalid
+                status: 400
+                detail: queue must not be blank
+                instance: /exceptions/case-1/triage
+            invalidAssignee:
+              summary: Blank assignee
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-assignee
+                title: Assignee is invalid
+                status: 400
+                detail: assignee must not be blank
+                instance: /exceptions/case-1/assign
+            invalidResolution:
+              summary: Missing resolution code or root cause
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-resolution
+                title: Resolution is invalid
+                status: 400
+                detail: resolutionCode and rootCause must not be blank
+                instance: /exceptions/case-1/resolve
+            invalidPolicy:
+              summary: Policy values out of range
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-policy
+                title: Policy is invalid
+                status: 400
+                detail: slaMinutes must be at least 1 and autoResolve.onType, when present, must be a full CloudEvents type
+                instance: /exception-policies/com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
+            invalidSourceType:
+              summary: Malformed source type
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-source-type
+                title: Source type is invalid
+                status: 400
+                detail: sourceType must be a full CloudEvents type this service consumes
+                instance: /exception-policies/nope
+            invalidCaseId:
+              summary: Invalid case id
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-case-id
+                title: Case id is invalid
+                status: 400
+                detail: "case id must start with case- and have no whitespace, control characters or '/'"
+                instance: /exceptions/nope
+            invalidStatus:
+              summary: Unknown status filter
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-status
+                title: Status is invalid
+                status: 400
+                detail: "status must be one of OPEN, TRIAGED, ASSIGNED, RESOLVED"
+                instance: /exceptions
+            idempotencyKeyRequired:
+              summary: Missing Idempotency-Key
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/idempotency-key-required
+                title: Idempotency-Key header is required
+                status: 400
+                detail: send an Idempotency-Key header with a unique value per logical request
+                instance: /exceptions/case-1/resolve
+    NotFound:
+      description: No case has this id, or the path holds a NUL byte.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            caseNotFound:
+              summary: No case has this id
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/case-not-found
+                title: Exception case not found
+                status: 404
+                detail: exception case not found
+                instance: /exceptions/case-unknown
+            notFound:
+              summary: Malformed path (including a NUL byte)
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/not-found
+                title: Not found
+                status: 404
+                detail: no such path
+                instance: /nope
+    Conflict:
+      description: The case is in the wrong state for the command, or the Idempotency-Key was reused.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          examples:
+            caseAlreadyResolved:
+              summary: RESOLVED is terminal
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/case-already-resolved
+                title: The case is already resolved
+                status: 409
+                detail: a resolved case accepts no further command
+                instance: /exceptions/case-1/resolve
+            idempotencyKeyReused:
+              summary: The Idempotency-Key was used with a different body
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/idempotency-key-reused
+                title: Idempotency-Key was already used with a different request
+                status: 409
+                detail: the Idempotency-Key was used with a different request body
+                instance: /exceptions/case-1/resolve
+            concurrentModification:
+              summary: Another request changed the case between read and write
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/concurrent-modification
+                title: The case was modified by another request; re-fetch the latest version and retry
+                status: 409
+                detail: re-fetch the case and retry the command
+                instance: /exceptions/case-1/triage
+    InternalError:
+      description: Unexpected server error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://errors.exception-management.warehouse-systems.dev/internal-error
+            title: Internal server error
+            status: 500
+            detail: an unexpected error occurred
+            instance: /exceptions
+
+  schemas:
+    CaseStatus:
+      type: string
+      description: |
+        The fixed status machine: `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`.
+        `RESOLVED` is terminal. `ESCALATED` is a flag, not a status.
+      enum: [OPEN, TRIAGED, ASSIGNED, RESOLVED]
+    Severity:
+      type: string
+      description: The triage outcome, from the policy or an operator.
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+
+    DedupKey:
+      type: object
+      required: [sourceType, sourceSubject, siteId]
+      properties:
+        sourceType: { type: string, description: The full CloudEvents type of the source fact. }
+        sourceSubject: { type: string, description: The subject of the source fact (its aggregate id). }
+        siteId: { type: string, nullable: true, description: The site carried by the source fact; null when it has none. }
+
+    AuditEntry:
+      type: object
+      required: [action, actor, at]
+      properties:
+        action: { type: string, description: "One of OPENED, TOUCHED, TRIAGED, ASSIGNED, ESCALATED, RESOLVED, AUTO_RESOLVED." }
+        actor: { type: string, description: "The operator id, the policy id or `system`." }
+        at: { type: string, format: date-time }
+
+    TriageRequest:
+      type: object
+      additionalProperties: false
+      required: [severity, queue]
+      properties:
+        severity: { $ref: "#/components/schemas/Severity" }
+        queue:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '\S'
+          description: The problem-solve queue the case is routed to.
+
+    AssignRequest:
+      type: object
+      additionalProperties: false
+      required: [assignee]
+      properties:
+        assignee:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '\S'
+          description: The operator id taking the case.
+
+    ResolveRequest:
+      type: object
+      additionalProperties: false
+      required: [resolutionCode, rootCause]
+      properties:
+        resolutionCode:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Z0-9_]+$'
+          description: What was done about the case (a code, not prose).
+        rootCause:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Z0-9_]+$'
+          description: Why it happened (a code, not prose).
+        note:
+          type: string
+          maxLength: 2000
+          description: Free-form remark; omitted when none.
+
+    AutoResolveRule:
+      type: object
+      additionalProperties: false
+      required: [onType, withinMinutes]
+      properties:
+        onType:
+          type: string
+          description: "The full CloudEvents type of the correlated fact that closes the case (e.g. OrderRepromised)."
+        withinMinutes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The correlated fact counts only within this many minutes of the case's last occurrence.
+
+    DeclarePolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [severity, queue, slaMinutes]
+      properties:
+        severity: { $ref: "#/components/schemas/Severity" }
+        queue:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '\S'
+          description: The queue cases of this source type are routed to.
+        slaMinutes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The SLA budget of cases opened under this policy.
+        autoResolve:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/AutoResolveRule"
+
+    ExceptionPolicy:
+      type: object
+      required: [sourceType, version, severity, queue, slaMinutes, declaredAt]
+      properties:
+        sourceType: { type: string, description: The full CloudEvents type of the governed source fact. }
+        version: { type: integer, format: int64, minimum: 1, description: "Append-only: 1 for the first declaration, +1 per accepted change." }
+        severity: { $ref: "#/components/schemas/Severity" }
+        queue: { type: string }
+        slaMinutes: { type: integer, format: int64, minimum: 1 }
+        autoResolve:
+          type: object
+          nullable: true
+          description: Null when the source type has no auto-resolve rule.
+          allOf:
+            - $ref: "#/components/schemas/AutoResolveRule"
+        declaredAt: { type: string, format: date-time }
+
+    ExceptionCase:
+      type: object
+      required: [caseId, dedupKey, status, severity, queue, occurrenceCount, escalated, openedAt, lastSeenAt, slaDueAt, sourceEventId, sourcePayload, auditTrail, version]
+      properties:
+        caseId: { type: string, example: case-1d2e3f4a-5b6c-4789-9abc-def012345678 }
+        dedupKey: { $ref: "#/components/schemas/DedupKey" }
+        status: { $ref: "#/components/schemas/CaseStatus" }
+        severity: { $ref: "#/components/schemas/Severity" }
+        queue: { type: string }
+        occurrenceCount: { type: integer, format: int64, minimum: 1, description: How many times the source fact arrived; 1 at open and +1 per repeat. }
+        escalated: { type: boolean, description: Set by the SLA sweeper at breach; never blocks a transition. }
+        assignee: { type: string, description: The owning operator id; absent before the first assignment. }
+        resolutionCode: { type: string, description: Absent until RESOLVED. }
+        rootCause: { type: string, description: Absent until RESOLVED. }
+        note: { type: string, description: Absent until RESOLVED; null when resolved without a note. }
+        resolvedAt: { type: string, format: date-time, description: Absent until the case is resolved or auto-resolved. }
+        autoResolveRuleId: { type: string, description: "The rule that fired, present only on an auto-resolved case." }
+        openedAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time, description: The arrival time of the most recent occurrence. }
+        slaDueAt: { type: string, format: date-time, description: "openedAt + the policy's slaMinutes at open." }
+        sourceEventId: { type: string, description: The CloudEvents id of the source fact that opened the case. }
+        sourcePayload:
+          type: object
+          description: The frozen copy of the source fact's data; never changes after open.
+        auditTrail:
+          type: array
+          description: One entry per transition, in order; every entry records its actor.
+          items: { $ref: "#/components/schemas/AuditEntry" }
+        version: { type: integer, format: int64, minimum: 1, description: "Starts at 1, +1 per accepted transition." }
+
+    Problem:
+      type: object
+      description: RFC 7807 problem document used for every non-2xx response.
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer, format: int32 }
+        detail: { type: string }
+        instance: { type: string }
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, example: ok }
