@@ -22,16 +22,26 @@ const (
 // OutboxPublisher is the pgxpool-backed ports.EventPublisher: the write side
 // of the transactional outbox. Called in the SAME UnitOfWork as the
 // aggregate's Save, every Publish inserts one row per domain fact; the relay
-// (a later step) drains unpublished rows to Kafka as CloudEvents 1.0. The
-// CloudEvents id (event_id, UUID v4) is minted ONCE here and persisted, so a
-// relay retry republishes the same id.
+// (adapters/outbound/outbox) drains unpublished rows to Kafka as CloudEvents
+// 1.0. The CloudEvents id (event_id, UUID v4) is minted ONCE here and
+// persisted, so a relay retry republishes the same id.
 type OutboxPublisher struct {
 	pool *pgxpool.Pool
+	// NewID mints each row's CloudEvents id; uuid.NewString when nil. The
+	// seam exists so the integration proof can pin the golden ids.
+	NewID func() string
 }
 
 // NewOutboxPublisher constructs an OutboxPublisher over pool.
 func NewOutboxPublisher(pool *pgxpool.Pool) *OutboxPublisher {
 	return &OutboxPublisher{pool: pool}
+}
+
+func (p *OutboxPublisher) mintID() string {
+	if p.NewID != nil {
+		return p.NewID()
+	}
+	return uuid.NewString()
 }
 
 // outboxEnvelope is the JSON payload of one outbox row: which fact happened,
@@ -83,7 +93,7 @@ func (p *OutboxPublisher) enqueue(ctx context.Context, aggregType, aggregID stri
 	_, err = queryFor(ctx, p.pool).Exec(ctx, `
 		INSERT INTO outbox (event_id, aggreg_type, aggreg_id, payload, occurred_at)
 		VALUES ($1, $2, $3, $4, $5)
-	`, uuid.NewString(), aggregType, aggregID, json.RawMessage(payload), env.OccurredAt)
+	`, p.mintID(), aggregType, aggregID, json.RawMessage(payload), env.OccurredAt)
 	if err != nil {
 		return fmt.Errorf("enqueue %s fact for %s %s: %w", env.Event, aggregType, aggregID, err)
 	}
