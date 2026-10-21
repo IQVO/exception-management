@@ -135,9 +135,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	select {
 	case err := <-errCh:
 		awaitRelay(logger, relayDone)
-		if cerr := sink.Close(); cerr != nil {
-			logger.Error("kafka relay sink close failed", "error", cerr)
-		}
+		closeSinkBounded(logger, sink)
 		return err
 	case <-ctx.Done():
 	}
@@ -157,9 +155,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("drain http: %w", err)
 	}
 	awaitRelay(logger, relayDone)
-	if cerr := sink.Close(); cerr != nil {
-		logger.Error("kafka relay sink close failed", "error", cerr)
-	}
+	closeSinkBounded(logger, sink)
 	return nil
 }
 
@@ -178,6 +174,26 @@ func newRelay(cfg bootConfig, pool *pgxpool.Pool, logger *slog.Logger) (*outboun
 		"events_topic", outboundkafka.TopicEvents, "dlq_topic", outboundkafka.DeadLetterTopic,
 		"brokers", cfg.brokers)
 	return sink, relay
+}
+
+const sinkCloseTimeout = 5 * time.Second
+
+// closeSinkBounded closes the Kafka writer with a hard deadline: a Close
+// concurrent with an in-flight write can block on the writer's mutex until
+// the write resolves, and shutdown must stay bounded (fleet rule: run always
+// returns). A timed-out close leaks the writer to GC — nothing writes after
+// the relay has stopped.
+func closeSinkBounded(logger *slog.Logger, sink *outboundkafka.RelaySink) {
+	done := make(chan error, 1)
+	go func() { done <- sink.Close() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			logger.Error("kafka relay sink close failed", "error", err)
+		}
+	case <-time.After(sinkCloseTimeout):
+		logger.Warn("kafka relay sink close timed out; writer left to GC", "timeout", sinkCloseTimeout.String())
+	}
 }
 
 // awaitRelay waits (bounded) for the relay goroutine to return.

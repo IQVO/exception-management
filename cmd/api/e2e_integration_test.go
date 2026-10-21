@@ -57,12 +57,16 @@ func freeAddr(t *testing.T) string {
 	return addr
 }
 
-// service is one running instance of the real entry point.
+// service is one running instance of the real entry point. Shutdown is
+// signalled by CLOSING stopped (observable by every waiter, nothing to
+// consume): a buffered done channel is racy here — a second armed reader
+// (the boot poll) can steal the single value before stop() sees it.
 type service struct {
-	t      *testing.T
-	base   string
-	cancel context.CancelFunc
-	done   chan error
+	t       *testing.T
+	base    string
+	cancel  context.CancelFunc
+	stopped chan struct{}
+	err     error
 }
 
 // startService boots run in-process with the environment a deployment sets
@@ -80,23 +84,22 @@ func startService(t *testing.T, dbURL, brokers string) *service {
 		t.Setenv(name, fmt.Sprintf("%s-%d", strings.ToLower(strings.TrimSuffix(name, "_CONSUMER_GROUP")), seq.Add(1)))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &service{t: t, base: "http://" + addr, cancel: cancel, done: make(chan error, 1)}
+	s := &service{t: t, base: "http://" + addr, cancel: cancel, stopped: make(chan struct{})}
 	go func() {
-		err := run(ctx, slogDiscard)
-		fmt.Printf("### run(%s) returned: %v\n", addr, err)
-		s.done <- err
+		s.err = run(ctx, slogDiscard)
+		close(s.stopped)
 	}()
 	t.Cleanup(func() {
 		s.cancel()
 		select {
-		case <-s.done:
+		case <-s.stopped:
 		case <-time.After(60 * time.Second):
 		}
 	})
 	waitFor(t, 60*time.Second, "the service to listen on "+addr, func() bool {
 		select {
-		case err := <-s.done:
-			t.Fatalf("run returned while booting: %v", err)
+		case <-s.stopped:
+			t.Fatalf("run returned while booting: %v", s.err)
 		default:
 		}
 		status, _, _ := s.try(http.MethodGet, "/healthz", "", nil)
@@ -112,20 +115,17 @@ var slogDiscard = newLogger("error")
 // stop cancels run and requires a clean shutdown within a bound.
 func (s *service) stop() {
 	s.t.Helper()
-	fmt.Printf("### stop() on %s\n", s.base)
 	s.cancel()
 	select {
-	case err := <-s.done:
-		fmt.Printf("### stop(%s) received %v\n", s.base, err)
-		if err != nil {
-			s.t.Fatalf("shutdown returned %v", err)
+	case <-s.stopped:
+		if s.err != nil {
+			s.t.Fatalf("shutdown returned %v", s.err)
 		}
-	case <-time.After(20 * time.Second):
+	case <-time.After(25 * time.Second):
 		buf := make([]byte, 1<<20)
 		n := runtime.Stack(buf, true)
 		s.t.Fatalf("run(%s) did not return after the shutdown\n\n%s", s.base, buf[:n])
 	}
-	s.done <- nil // let the cleanup find it stopped
 }
 
 // try performs a request and returns -1 when the connection fails.
