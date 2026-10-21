@@ -64,6 +64,16 @@ relay drain (10 s) + inbound consumers drain (15 s) + consumer close (5 s) ≈ 4
   ([MCP tools](/docs/mcp/tools)).
 - **Redrive a DLQ** — see below.
 
+## Outbox relay
+
+Every published event is claimed from the outbox by the relay
+(`OUTBOX_RELAY_INTERVAL`, default 1 s, batches per row) — nothing is published from a handler
+directly ([ADR 0005](/docs/adr/0005-outbox-relay-attempt-cap-and-dlq)). A row that keeps failing
+is excluded after `OUTBOX_MAX_ATTEMPTS` (default 20) so a poison row can never block the relay,
+and a row whose fact the encoder refuses is dead-lettered at once (below). A crash between
+publish and mark re-delivers the row **byte-identically** — same CloudEvents `id` — so consumers
+dedupe; at-least-once is the contract.
+
 ## Dead-letter topics
 
 | Topic | Written by | Cause | Redrive |

@@ -142,6 +142,7 @@ const config: Config = {
             {label: 'Quickstart', to: '/docs/overview/quickstart'},
             {label: 'Runbook', to: '/docs/operations/runbook'},
             {label: 'API Reference', to: '/docs/api-reference'},
+            {label: 'MCP tools', to: '/docs/mcp/tools'},
             {label: 'Architecture decisions', to: '/docs/adr'},
           ],
         },
