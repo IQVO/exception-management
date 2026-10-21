@@ -96,6 +96,24 @@ func TestEscalateFiresOnceAtBreachAsASingleWrite(t *testing.T) {
 	}
 }
 
+// A one-minute SLA is the smallest valid budget — the exact boundary of the
+// < 1 gate in Open AND in Restore, which must stay inclusive of 1.
+func TestASingleMinuteSLAIsTheSmallestValidBudget(t *testing.T) {
+	t.Parallel()
+	in := testOpenInput()
+	in.SLAMinutes = 1
+	c, err := Open(in)
+	if err != nil {
+		t.Fatalf("Open with a 1-minute SLA: %v", err)
+	}
+	if got := c.SLADueAt(); !got.Equal(openedAt.Add(time.Minute)) {
+		t.Errorf("SLADueAt = %v, want openedAt+1m", got)
+	}
+	if _, err := Restore(c.Snapshot()); err != nil {
+		t.Errorf("Restore of a 1-minute-SLA row: %v", err)
+	}
+}
+
 // Invariant: a second Escalate is a no-op (no event, no version bump), and a
 // resolved case never escalates.
 func TestEscalateIsANoOpAfterEscalationOrOnAResolvedCase(t *testing.T) {

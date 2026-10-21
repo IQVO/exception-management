@@ -212,3 +212,18 @@ func TestDeclarationNamesTheFact(t *testing.T) {
 		t.Errorf("Declaration = %+v", d)
 	}
 }
+
+// A one-minute SLA is the smallest valid budget — the exact boundary of the
+// < 1 gate, which must stay inclusive of 1.
+func TestASingleMinuteSLAIsTheSmallestValidBudget(t *testing.T) {
+	t.Parallel()
+	in := testDeclareInput()
+	in.SLAMinutes = 1
+	p, err := Declare(in)
+	if err != nil {
+		t.Fatalf("Declare with a 1-minute SLA: %v", err)
+	}
+	if p.SLAMinutes() != 1 {
+		t.Errorf("SLAMinutes = %d, want 1", p.SLAMinutes())
+	}
+}

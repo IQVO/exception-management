@@ -66,3 +66,19 @@ func TestTheAutoResolveRuleMatchesOnlyTheSameSubjectWithinItsWindow(t *testing.T
 		t.Error("a 1-minute-old fact is inside a 1-minute window")
 	}
 }
+
+// A full type's boundaries are accepted: exactly two dots after the prefix,
+// and an Event segment starting at either alphabet edge ('A', 'Z').
+func TestFullTypeBoundariesAreAccepted(t *testing.T) {
+	t.Parallel()
+	edges := []string{
+		"com.warehouse.wes.thing.Happened",   // exactly two dots after the prefix
+		"com.warehouse.wes.test.AckLost",     // Event starting at 'A'
+		"com.warehouse.wes.test.ZoneChanged", // Event starting at 'Z'
+	}
+	for _, typ := range edges {
+		if _, err := NewRule(typ, 1); err != nil {
+			t.Errorf("NewRule(%q) err = %v, want nil", typ, err)
+		}
+	}
+}

@@ -17,6 +17,10 @@ func TestParseWorkUnitRefReversesTheFrozenFormula(t *testing.T) {
 		{"ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2-line-12", "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2", 12, true},
 		{"o-line-1", "o", 1, true},
 		{"a-line-999999999", "a", 999999999, true},
+		// A '0' INSIDE a multi-digit line number is a real digit, not the
+		// no-leading-zero guard: it must still parse.
+		{"ord-7-line-10", "ord-7", 10, true},
+		{"ord-7-line-305", "ord-7", 305, true},
 		// An order id that itself contains the marker still round-trips: the
 		// LAST occurrence is the separator.
 		{"ord-line-2-line-5", "ord-line-2", 5, true},
