@@ -12,23 +12,29 @@
 // usecases.ConsumeFact / ConsumeCorrelation) and its offset is committed
 // only AFTER handling returned nil (FetchMessage + CommitMessages).
 //
-// Deterministic problems — a message that is not a valid CloudEvent, a type
-// this consumer has no handler for, a payload of a handled type that can
-// never be applied (unmappable/blank natural id, no declared policy) — are
-// logged at WARN and committed past: they can never succeed, so retrying
-// would wedge the partition. A TRANSIENT failure (Postgres down, a failed
-// commit) is retried on the SAME message with capped exponential backoff,
-// forever: this service has no inbound dead-letter queue because every
-// effect is idempotent under the claimed event id — a redelivery after a
-// crash is always safe, and a dropped message would be a silently missed
-// exception. A topic that does not exist yet (returns-processing's topic is
-// created by its producer, not by this service) is kafka-go's internal
-// retry, surfaced through the reader's ErrorLogger: retry logs, never
-// unreadiness, never a crash.
+// Deterministic problems are logged at WARN and committed past — they can
+// never succeed, so retrying would wedge the partition: a message that is
+// not a valid CloudEvent (the type is unknowable; nothing to replay), a
+// type this consumer has no handler for, and a fact whose source type has
+// no declared policy (a configuration gap, not the message's fault: the
+// next occurrence after a declaration applies; the DLQ would hide exactly
+// that recovery). A message of a HANDLED type that can never be applied (a
+// payload that does not decode, a blank natural id) is additionally
+// DEAD-LETTERED to "<topic>.dlq" at once, headers carrying the source topic
+// and the cause, and the offset moves past it. A TRANSIENT failure
+// (Postgres down, a failed commit) is retried on the SAME message with
+// capped exponential backoff, forever — every effect is idempotent under
+// the claimed event id, so a redelivery after a crash is always safe, and
+// dropping a transiently unhandleable exception fact would be a silently
+// missed exception. A topic that does not exist yet (returns-processing's
+// topic is created by its producer, not by this service) is kafka-go's
+// internal retry, surfaced through the reader's ErrorLogger: retry logs,
+// never unreadiness, never a crash.
 package kafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -136,12 +142,17 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 // consumeLoop is the at-least-once run loop shared by the consumers.
 type consumeLoop struct {
 	reader Reader
-	// handle applies one message; non-nil means transient failure => retry.
+	// handle applies one message; non-nil means transient failure => retry
+	// (or a poison marker => dead-letter).
 	handle func(ctx context.Context, msg kafkago.Message) error
 	logger *slog.Logger
 	name   string
 	retry  RetryPolicy
 	sleep  sleepFunc
+
+	// deadLetter publishes a message the consumer can never apply to the
+	// topic's dead letter topic (nil: poison is only WARNed and skipped).
+	deadLetter func(ctx context.Context, msg kafkago.Message, cause error) error
 }
 
 // run fetches one message at a time and does not fetch the next until the
@@ -158,9 +169,7 @@ func (l *consumeLoop) run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := l.retryUntilOK(ctx, policy, sleep, "handling", msg, func() error {
-			return l.handle(ctx, msg)
-		}); err != nil {
+		if err := l.handleWithDeadLetter(ctx, policy, sleep, msg); err != nil {
 			return err
 		}
 		// Commit ONLY now. A commit that fails is retried too: the work is
@@ -172,6 +181,46 @@ func (l *consumeLoop) run(ctx context.Context) error {
 			return err
 		}
 	}
+}
+
+// handleWithDeadLetter applies one message, deciding what a failure means:
+//
+//   - nil: done, the caller commits;
+//   - a POISON marker (a payload of a handled type that can never be
+//     applied): dead-lettered at once — without a handling retry — and the
+//     offset then moves past it, so a deterministic refusal cannot wedge the
+//     partition. The dead-letter PUBLISH itself is retried forever: a
+//     message that could not even be dead-lettered must never be silently
+//     committed past;
+//   - anything else is TRANSIENT: the SAME message is retried with the
+//     capped exponential backoff, forever (the effects are idempotent under
+//     the claimed event id, so redelivery is always safe).
+//
+// The ctx.Err() check at the top is the fleet's escape-18b guard and it
+// lives HERE, in the function that decides: a handler that failed because
+// the process is stopping is neither retried past the cancellation nor
+// dead-lettered — the offset stays uncommitted and the message is
+// redelivered on restart.
+func (l *consumeLoop) handleWithDeadLetter(ctx context.Context, p RetryPolicy, sleep sleepFunc, msg kafkago.Message) error {
+	err := l.handle(ctx, msg)
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var poison *errDeadLetter
+	if l.deadLetter != nil && errors.As(err, &poison) {
+		cause := deadLetterCause(err)
+		l.logger.ErrorContext(ctx, l.name+" message can never be applied; dead-lettering it without retry",
+			"error", cause, "partition", msg.Partition, "offset", msg.Offset)
+		return l.retryUntilOK(ctx, p, sleep, "dead-letter publish", msg, func() error {
+			return l.deadLetter(ctx, msg, cause)
+		})
+	}
+	return l.retryUntilOK(ctx, p, sleep, "handling", msg, func() error {
+		return l.handle(ctx, msg)
+	})
 }
 
 // retryUntilOK runs op until it returns nil, sleeping with capped

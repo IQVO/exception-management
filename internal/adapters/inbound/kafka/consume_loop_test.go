@@ -178,6 +178,83 @@ func TestConsumeLoop_FetchFailureStopsRun(t *testing.T) {
 	}
 }
 
+// TestConsumeLoop_DeadLettersPoisonAtOnce: a poison marker is published to
+// the dead letter topic without a handling retry, and the offset then moves
+// past the message.
+func TestConsumeLoop_DeadLettersPoisonAtOnce(t *testing.T) {
+	reader := &fakeReader{msgs: []kafkago.Message{msg(0, "poison"), msg(1, "good")},
+		fetchErr: context.Canceled}
+	var dead []string
+	var mu sync.Mutex
+	ctx, cancel := context.WithCancel(context.Background())
+	loop := consumeLoop{
+		reader: reader, logger: slog.Default(), name: "test",
+		sleep: func(context.Context, time.Duration) error { return nil },
+		handle: func(_ context.Context, m kafkago.Message) error {
+			if string(m.Value) == "poison" {
+				return &errDeadLetter{cause: errors.New("no mappable id")}
+			}
+			return nil
+		},
+		deadLetter: func(_ context.Context, m kafkago.Message, cause error) error {
+			mu.Lock()
+			dead = append(dead, string(m.Value)+" ("+cause.Error()+")")
+			mu.Unlock()
+			return nil
+		},
+	}
+	done := make(chan error, 1)
+	go func() { done <- loop.run(ctx) }()
+	waitFor(t, 5*time.Second, "the poison and the good message committed", func() bool {
+		return reader.commitsN() == 2
+	})
+	cancel()
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("run = %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(dead) != 1 || dead[0] != "poison (no mappable id)" {
+		t.Fatalf("dead letters = %v, want the poison only", dead)
+	}
+}
+
+// TestConsumeLoop_NeverDeadLettersACancelledMessage: the fleet escape-18b
+// guard — a handler that fails BECAUSE the process is stopping is never
+// dead-lettered; the offset stays uncommitted and the message is
+// redelivered on restart.
+func TestConsumeLoop_NeverDeadLettersACancelledMessage(t *testing.T) {
+	reader := &fakeReader{msgs: []kafkago.Message{msg(0, "good")}, fetchErr: context.Canceled}
+	dead := 0
+	var mu sync.Mutex
+	ctx, cancel := context.WithCancel(context.Background())
+	loop := consumeLoop{
+		reader: reader, logger: slog.Default(), name: "test",
+		sleep: func(context.Context, time.Duration) error { return nil },
+		handle: func(context.Context, kafkago.Message) error {
+			cancel() // the shutdown lands mid-handle
+			return context.Canceled
+		},
+		deadLetter: func(context.Context, kafkago.Message, error) error {
+			mu.Lock()
+			dead++
+			mu.Unlock()
+			return nil
+		},
+	}
+	if err := loop.run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("run = %v, want the cancellation", err)
+	}
+	if reader.commitsN() != 0 {
+		t.Fatalf("%d commits of a message interrupted by shutdown", reader.commitsN())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if dead != 0 {
+		t.Fatal("a message interrupted by shutdown was dead-lettered")
+	}
+}
+
 // TestConsumeLoop_CommitFailureIsRetried: the effect is durable (the
 // processed-events claim), so a failed commit is retried until it succeeds.
 func TestConsumeLoop_CommitFailureIsRetried(t *testing.T) {
