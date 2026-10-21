@@ -1,0 +1,65 @@
+---
+id: reject-create-exception
+title: "Cases are never created over REST (always 405)"
+description: "There is deliberately **no `POST /exceptions`**: every case opens"
+sidebar_label: "Cases are never created over REST (always 405)"
+hide_title: true
+hide_table_of_contents: true
+api: eJztVt9vGzcM/lcIPSXZ+UezZO2crUCQekXQNMnitHuoCxyto31adNRV0iU2Av/vA3WO4ybusA57nB/s80miyI8f+fFeuZo8RuP4tFAD5elP0vHEE0YazjXVsqIyVVDQ3rT/Buq6JE9gAhRkzUTOk13A3h47yC8vRtfQo4ezId/bGwDdkl+AxkDgauIw5ql3FSBox6GpqIAp6gg7x2+uoN/vv9jNALkABE+1uLJaj67RJQWIZWtnzMnkjtO68Z5YE2jXcMwgtxjiiIiPY74LhkMkLMBN0zHDM0B2sSTfHfN1SeBdE8kDcrgjHyA/6B9CRbF0RYdd7KC17o6KHBgrOZy/HV7ngMmRMa9WVwdazwWJ04Kq2kVivei8o0XeAlYhFxKP8SF2x4JtxFlQg09qjXdQnzPlKdSOAwU1uFcH/UP5+ToLJxK7llQZx1A4CsAuAs1NiEebkGtXUYBtiHdVprTjSBzFPta1NTrZ69XeTSxVP/wZ5LJ7FXRJFcpTXNSkBspNhCrPuHH12wm8fNV/CSsDUDjdVMQRmiC3Or9yjR139udzeAhUfPH0pTGeCoEjXZOpaKKV3xAxNiFdF9FYgaj2Qt5oWoxat9buhegNz1Smps5XGNVANd6o5YPBZxuX6yselwxHmpHfNGI4/rgvm1dubLMjdEPW2y55vF9dtvjIAZpjVX/lVBljHQa9HnnvfOiuy6lTIeOMBM/uHXoqXROoExYhUhW6Bd32ntNWPd75Pi0mmjwuPoR90D98DEvFrTXODp4W+NGz6t5KtY3iVpsQqQ1TaimfTLUxqIGqXRCG1RjLJzszFcjfkpfKuVeNtyvQBr2edRpt6UIcvOq/6j8j6JksQ0G3ZF0tQKpl9jcW+v0e1qa3LQPfMH1juABtmyAtJZbeNbMS3jlJ/2eJfOpSolcpWVc9vF8bhuPLU5UpCa81/KLb7z6PRDrXH8NRJxry4O5YvqepOe7trdgFI2dvaW8PrJmSXmhLYLhtW8/oA7XFKER/TFUGq6f93S4MH9McIvr4kOcxp/yuOiqkfjKPUDcTa0JJBewgVCZI9Z9cXmeAMPGEWlYmqG+sm405lp5C6Wxqn4Cx4024AdQ37O4sFS0sWeJUwxEKE7SnGlkv0oGGaV6TjlSM2VNsPO8eQSxNECSFxHeJza3WOR8geoMzygBDMDNOLdtTEKwgli5QqyyhbebtYcG1RC6sKEDtrNELqMlDcI3XBFK4bbloi56K7piTtnyfUGKLrwmA9g4XQdD9qoz+mTDCU10UK98njJC3fSEH34hg5xeXw3PovIbrq9Pjt8M38ng8Gp2+PW+fr4aji7OPwzf5EeTrZ1g19BRHArhJVNeuoBSICRDJV4bRHkFOQaOVqJJWIkwtziBQhMkihTY6Ox6LRFNNPgOWvgMoZIyttYc3E+v0TRL3MQ9viWMA9LTBSAxwYl1TrBYdjzlf18P2bktpa74uaITokQNq2YgWXBMnbj7mnUAEOdYm9DAsWGNtugusbL6upQOppdTXk1dPBXPMD4oZ4M7Ecsx54tav8O9F4Zdgm9nrvLvBSHaATSyJ40rxweKCPOxMLVEUGhtpPrDf3/+p0/+58+LFbjuuSH2jTvMCYyUtbJsjUKHhiIalRWcb7VUCmJlYNpOudlXv9PePF9ub6zJT1mjiQBtXfTg/Oz0Zno+Gb5KWij5UyBsbZChqcW3JkOYjKsDJn6vh6Bp2VpV10D/cfdpS7x+nof+H3P92yG3nGlGGXm3RsOQ3seJ+Je+fFH01AIv+ytv7+wkG+uDtcimvvzTkF2rw6XOmbtEbnIiKfvq8zFRJWJBP88ANLdRAHWuxJ0KKtpHbvznfijCvhw5Jrlou/wJJ+Jf8
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/exception-management-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Cases are never created over REST (always 405)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/exceptions"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+There is deliberately **no `POST /exceptions`**: every case opens
+from a consumed fact (ADR 0001), and a repeated fact touches the open
+case (occurrence count, `lastSeenAt`) instead of opening another.
+The router answers `405 method-not-allowed` naming `GET` as the
+allowed method, and no `Idempotency-Key` is demanded first.
+
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./reject-create-exception.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./reject-create-exception.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

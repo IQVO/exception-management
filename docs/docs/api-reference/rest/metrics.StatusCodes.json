@@ -1,0 +1,1 @@
+{"responses":{"200":{"description":"The metrics of the process.","content":{"text/plain":{"schema":{"type":"string"}}}}}}

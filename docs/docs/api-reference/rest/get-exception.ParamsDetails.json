@@ -1,0 +1,1 @@
+{"parameters":[{"name":"caseId","in":"path","required":true,"description":"The case id (`case-` followed by a unique suffix, at most 64 characters).","schema":{"type":"string","minLength":6,"maxLength":64,"pattern":"^case-[^\\s/]+$"},"example":"case-1d2e3f4a-5b6c-4789-9abc-def012345678"}]}

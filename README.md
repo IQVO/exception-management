@@ -6,6 +6,19 @@ Exception Management ("Problem Solve"): WES-tier Supporting bounded context of t
 - Scaffolded from `warehouse-harness-template` (v4). Guides: `.claude/rules/`, sensors: `HARNESS.md`.
 - Commands: `make check-fast`, `make check-all`, `make integration`.
 
+## Docs
+
+The Docusaurus site in `docs/` (ddd-crew pack, ADRs, generated REST reference, event catalogue,
+MCP tools, operations pages):
+
+```bash
+cd docs && npm ci && npm run build     # npm run gen-api-docs regenerates the REST pages
+```
+
+Published to GitHub Pages by `.github/workflows/docs.yml` (PRs build, `main` deploys); the
+`docs-api-drift` CI job fails a PR whose generated reference is out of sync with
+`apis/openapi.yaml`.
+
 ## What it does
 
 - Opens exactly one case per dedup key (source type, subject, site) from a consumed fact; a repeated fact touches the open case instead of opening another.
