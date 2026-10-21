@@ -26,6 +26,7 @@ type CaseView struct {
 	SLAMinutes        int64
 	SLADueAt          time.Time
 	SourceEventID     string
+	SourcePayload     []byte
 	ResolutionCode    string
 	RootCause         string
 	Note              string
@@ -55,4 +56,22 @@ type SLAReport struct {
 	Escalated   int
 	BySeverity  map[string]int
 	ByQueue     map[string]int
+}
+
+// AutoResolveRuleView is the read DTO of a policy's auto-resolve rule.
+type AutoResolveRuleView struct {
+	OnType        string
+	WithinMinutes int64
+}
+
+// PolicyView is the read DTO of one declared policy version: the latest
+// version of its source type, wire-form.
+type PolicyView struct {
+	SourceType  string
+	Version     int64
+	Severity    string
+	Queue       string
+	SLAMinutes  int64
+	AutoResolve *AutoResolveRuleView // nil = no rule
+	DeclaredAt  time.Time
 }

@@ -21,6 +21,7 @@ func PolicyRepo(t *testing.T, newRepo func(t *testing.T) ports.ExceptionPolicyRe
 		"a declaration round trips its auto rule":    policyRoundTripRule,
 		"a redeclaration becomes the latest version": policyLatest,
 		"a same-version save is a lost declare race": policySameVersionConflict,
+		"list returns every latest version by type":  policyList,
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) { fn(t, newRepo(t)) })
@@ -109,4 +110,23 @@ func policySameVersionConflict(t *testing.T, r ports.ExceptionPolicyRepo) {
 	must(t, r.Save(bg, declare(t, SrcType, 1, false, T0)))
 	// Another writer computed the SAME version and declared it first.
 	wantErr(t, r.Save(bg, declare(t, SrcType, 1, false, T0.Add(time.Second))), usecases.ErrConcurrentModification)
+}
+
+func policyList(t *testing.T, r ports.ExceptionPolicyRepo) {
+	must(t, r.Save(bg, declare(t, SrcType, 1, false, T0)))
+	must(t, r.Save(bg, declare(t, SrcType, 2, true, T0.Add(time.Minute))))
+	must(t, r.Save(bg, declare(t, OtherType, 1, false, T0.Add(2*time.Minute))))
+
+	got, err := r.List(bg)
+	must(t, err)
+	if len(got) != 2 {
+		t.Fatalf("list = %d policies, want 2 (one per source type)", len(got))
+	}
+	// Ordered by source type, and only the LATEST version of each.
+	if got[0].SourceType() != OtherType || got[0].Version() != 1 {
+		t.Fatalf("first = %s v%d, want %s v1 (ordered by source type)", got[0].SourceType(), got[0].Version(), OtherType)
+	}
+	if got[1].SourceType() != SrcType || got[1].Version() != 2 || got[1].AutoResolve() == nil {
+		t.Fatalf("second = %s v%d rule=%v, want %s v2 with its rule", got[1].SourceType(), got[1].Version(), got[1].AutoResolve(), SrcType)
+	}
 }

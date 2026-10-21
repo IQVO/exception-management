@@ -85,3 +85,43 @@ func (r *PolicyRepo) Get(ctx context.Context, sourceType string) (*exceptionpoli
 	}
 	return p, nil
 }
+
+// List implements ports.ExceptionPolicyRepo: the LATEST declared version of
+// every source type, ordered by source type (GET /exception-policies).
+func (r *PolicyRepo) List(ctx context.Context) ([]*exceptionpolicy.Policy, error) {
+	rows, err := queryFor(ctx, r.pool).Query(ctx, `
+		SELECT DISTINCT ON (source_type) `+policyColumns+`
+		FROM exception_policies
+		ORDER BY source_type, version DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list exception policies: %w", err)
+	}
+	defer rows.Close()
+	out := []*exceptionpolicy.Policy{}
+	for rows.Next() {
+		var (
+			s        exceptionpolicy.Snapshot
+			severity string
+			onType   *string
+			within   *int64
+		)
+		if err := rows.Scan(&s.SourceType, &s.Version, &severity, &s.Queue, &s.SLAMinutes, &onType, &within, &s.DeclaredAt); err != nil {
+			return nil, err
+		}
+		s.Severity = shared.Severity(severity)
+		if onType != nil && within != nil {
+			rule, err := exceptionpolicy.NewRule(*onType, *within)
+			if err != nil {
+				return nil, fmt.Errorf("stored policy %s v%d has an invalid rule: %w", s.SourceType, s.Version, err)
+			}
+			s.AutoResolve = &rule
+		}
+		p, err := exceptionpolicy.Restore(s)
+		if err != nil {
+			return nil, fmt.Errorf("stored policy %s v%d is invalid: %w", s.SourceType, s.Version, err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}

@@ -30,6 +30,7 @@ func CaseRepo(t *testing.T, newRepo func(t *testing.T) ports.ExceptionCaseRepo) 
 		"a re-save of an unchanged case conflicts":           caseResaveConflicts,
 		"a restored case has no pending events":              caseNoPendingEvents,
 		"list open excludes resolved and narrows by filters": caseListOpen,
+		"list serves every status newest first":              caseList,
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) { fn(t, newRepo(t)) })
@@ -244,6 +245,41 @@ func caseListOpen(t *testing.T, r ports.ExceptionCaseRepo) {
 	must(t, err)
 	if !equalIDs(ids(got), []string{"case-c"}) {
 		t.Fatalf("by all three = %v", ids(got))
+	}
+}
+
+func caseList(t *testing.T, r ports.ExceptionCaseRepo) {
+	// Same world as caseListOpen: three open cases, one resolved.
+	save(t, r, Opened(t, "case-a", Subject, T0))                                          // ps-main, SIM1, TaskCPTMissed
+	save(t, r, Opened(t, "case-b", "ord-8-line-1", T0.Add(time.Minute)))                  // ps-main, SIM1, TaskCPTMissed
+	save(t, r, OpenedFor(t, "case-c", OtherType, Subject, "SIM2", T0.Add(2*time.Minute))) // queue ps-main, site SIM2
+	resolved := Opened(t, "case-x", "ord-9-line-1", T0.Add(3*time.Minute))
+	must(t, resolved.Triage(shared.SeverityCritical, "ps-urgent", mustActor(t, "op-1"), T0.Add(3*time.Minute)))
+	must(t, resolved.Resolve("DONE", "handled", "", mustActor(t, "op-1"), T0.Add(4*time.Minute)))
+	save(t, r, resolved)
+
+	// No status filter: every case, open AND resolved, newest first.
+	got, err := r.List(bg, "", "", "", "")
+	must(t, err)
+	if !equalIDs(ids(got), []string{"case-x", "case-c", "case-b", "case-a"}) {
+		t.Fatalf("all statuses, newest first = %v", ids(got))
+	}
+	// The status filter narrows to exactly that status.
+	got, err = r.List(bg, "RESOLVED", "", "", "")
+	must(t, err)
+	if !equalIDs(ids(got), []string{"case-x"}) {
+		t.Fatalf("resolved only = %v", ids(got))
+	}
+	got, err = r.List(bg, "OPEN", "", "", "")
+	must(t, err)
+	if !equalIDs(ids(got), []string{"case-c", "case-b", "case-a"}) {
+		t.Fatalf("open only = %v", ids(got))
+	}
+	// The other filters combine with the status filter.
+	got, err = r.List(bg, "OPEN", "ps-main", "SIM1", SrcType)
+	must(t, err)
+	if !equalIDs(ids(got), []string{"case-b", "case-a"}) {
+		t.Fatalf("open + queue + site + type = %v", ids(got))
 	}
 }
 

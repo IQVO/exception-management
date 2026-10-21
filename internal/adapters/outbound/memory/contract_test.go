@@ -19,3 +19,7 @@ func TestCaseRepoContract(t *testing.T) {
 func TestPolicyRepoContract(t *testing.T) {
 	repocontract.PolicyRepo(t, func(*testing.T) ports.ExceptionPolicyRepo { return memory.NewPolicies() })
 }
+
+func TestIdempotencyStoreContract(t *testing.T) {
+	repocontract.IdempotencyStore(t, func(*testing.T) ports.IdempotencyStore { return memory.NewIdempotencyStore() })
+}

@@ -36,15 +36,15 @@ func TestMigrationsApplyAndAreIdempotent(t *testing.T) {
 	}
 	defer func() { _ = conn.Close(ctx) }()
 
-	for _, table := range []string{"exception_cases", "exception_policies", "processed_events", "outbox"} {
+	for _, table := range []string{"exception_cases", "exception_policies", "processed_events", "outbox", "idempotency_keys"} {
 		var reg string
 		if err := conn.QueryRow(ctx, `SELECT to_regclass($1)::text`, "public."+table).Scan(&reg); err != nil || reg == "" {
 			t.Fatalf("table %s missing after migration (reg=%q err=%v)", table, reg, err)
 		}
 	}
 	var version int
-	if err := conn.QueryRow(ctx, `SELECT version FROM schema_migrations`).Scan(&version); err != nil || version != 1 {
-		t.Fatalf("schema_migrations version = %d %v, want 1", version, err)
+	if err := conn.QueryRow(ctx, `SELECT version FROM schema_migrations`).Scan(&version); err != nil || version != 2 {
+		t.Fatalf("schema_migrations version = %d %v, want 2", version, err)
 	}
 }
 
@@ -101,7 +101,7 @@ func TestMigrationsDownRecreatesThePreviousSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = conn.Close(ctx) }()
-	for _, table := range []string{"exception_cases", "exception_policies", "processed_events", "outbox"} {
+	for _, table := range []string{"exception_cases", "exception_policies", "processed_events", "outbox", "idempotency_keys"} {
 		var reg *string
 		if err := conn.QueryRow(ctx, `SELECT to_regclass($1)::text`, "public."+table).Scan(&reg); err != nil {
 			t.Fatalf("probe %s: %v", table, err)

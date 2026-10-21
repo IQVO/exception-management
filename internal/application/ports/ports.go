@@ -11,6 +11,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/claudioed/exception-management/internal/application/repository"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/exceptionpolicy"
 	"github.com/claudioed/exception-management/internal/domain/shared"
@@ -39,9 +40,16 @@ type ExceptionCaseRepo interface {
 	FindOpenByDedupKey(ctx context.Context, key shared.DedupKey) (*exceptioncase.Case, error)
 	// ListOpen returns every non-resolved case, narrowed by the non-blank
 	// filters (exact match on queue, site id and source type; "" narrows
-	// nothing), ordered by opened-at then case id. Serves read use cases and
-	// the SLA sweeper.
+	// nothing), ordered by opened-at then case id. Serves the SLA sweeper
+	// and the correlation paths.
 	ListOpen(ctx context.Context, queue, siteID, sourceType string) ([]*exceptioncase.Case, error)
+	// List serves the operator listing (GET /exceptions): every case whose
+	// status matches status ("" = EVERY status, open and resolved alike —
+	// resolve activity is part of the record, per apis/openapi.yaml),
+	// narrowed by the non-blank filters, NEWEST opened first (opened-at
+	// descending, then case id descending — the order the in-memory adapter
+	// returns too).
+	List(ctx context.Context, status, queue, siteID, sourceType string) ([]*exceptioncase.Case, error)
 }
 
 // ExceptionPolicyRepo persists the append-only ExceptionPolicy versions by
@@ -52,6 +60,22 @@ type ExceptionPolicyRepo interface {
 	// Get returns the LATEST declared version of the source type's policy, or
 	// ErrNotFound when the type was never declared.
 	Get(ctx context.Context, sourceType string) (*exceptionpolicy.Policy, error)
+	// List returns the latest declared version of EVERY source type,
+	// ordered by source type (GET /exception-policies).
+	List(ctx context.Context) ([]*exceptionpolicy.Policy, error)
+}
+
+// IdempotencyStore keeps the answers of requests made with an
+// Idempotency-Key. The first writer of a key wins: a later Save of the same
+// key changes nothing, so two concurrent requests with one key cannot both
+// record their answer. Lookup runs inside the middleware's unit of work on
+// the fresh path (the race re-read), and standalone on the replay path.
+type IdempotencyStore interface {
+	// Lookup returns the stored answer of key, or found=false when the key
+	// has none.
+	Lookup(ctx context.Context, key string) (repository.IdempotencyRecord, bool, error)
+	// Save stores rec unless the key already has an answer.
+	Save(ctx context.Context, rec repository.IdempotencyRecord) error
 }
 
 // EventPublisher is the write side of the transactional outbox, in domain

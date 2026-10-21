@@ -274,11 +274,19 @@ func registerOutcomeSteps(sc *godog.ScenarioContext, w *world) {
 	})
 
 	sc.Step(`^the open caseload has (\d+) cases?$`, func(want int) error {
-		open, err := w.uc.list.Execute(w.ctx, "", "", "")
+		all, err := w.uc.list.Execute(w.ctx, "", "", "", "")
 		if err != nil {
 			return err
 		}
-		return wantInt("open caseload", len(open), want)
+		// The open caseload counts every case that is not RESOLVED yet
+		// (resolve activity is part of the record, so the listing keeps it).
+		open := 0
+		for _, c := range all {
+			if c.Status != "RESOLVED" {
+				open++
+			}
+		}
+		return wantInt("open caseload", open, want)
 	})
 }
 
