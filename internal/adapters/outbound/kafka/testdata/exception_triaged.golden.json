@@ -1,0 +1,17 @@
+{
+  "specversion": "1.0",
+  "id": "0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d",
+  "source": "/warehouse/exception-management",
+  "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionTriaged",
+  "subject": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+  "time": "2026-10-21T09:41:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:exception-management:events:ExceptionTriaged:v1",
+  "data": {
+    "case_id": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+    "severity": "MEDIUM",
+    "queue": "ps-expedite",
+    "actor": "ops-amy",
+    "at": "2026-10-21T09:41:00Z"
+  }
+}

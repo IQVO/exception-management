@@ -1,0 +1,17 @@
+{
+  "specversion": "1.0",
+  "id": "a5948372-6150-4f3e-8d7c-4b6a2b1a0f9e",
+  "source": "/warehouse/exception-management",
+  "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved",
+  "subject": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+  "time": "2026-10-21T09:35:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:exception-management:events:ExceptionAutoResolved:v1",
+  "data": {
+    "case_id": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+    "rule_id": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed->com.warehouse.wes.order-management.order.OrderRepromised",
+    "correlated_type": "com.warehouse.wes.order-management.order.OrderRepromised",
+    "correlated_event_id": "f3e2d1c0-9b8a-4c5d-6e7f-8a9b0c1d2e3f",
+    "at": "2026-10-21T09:35:00Z"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "specversion": "1.0",
+  "id": "6f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e5f",
+  "source": "/warehouse/exception-management",
+  "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionOpened",
+  "subject": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+  "time": "2026-10-21T09:30:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:exception-management:events:ExceptionOpened:v1",
+  "data": {
+    "case_id": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+    "source_type": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
+    "source_subject": "task-8a1f",
+    "site_id": null,
+    "severity": "HIGH",
+    "queue": "ps-main",
+    "opened_at": "2026-10-21T09:30:00Z",
+    "sla_due_at": "2026-10-21T10:00:00Z",
+    "source_event_id": "0e8d7c6b-5a4f-4c3b-9e2d-1f0a9b8c7d6e",
+    "source_payload": {
+      "task_id": "task-8a1f",
+      "order_ref": "wu-8a1f",
+      "task_type": "PICK",
+      "cpt": "2026-09-30T14:55:00Z"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "specversion": "1.0",
+  "id": "4d3c2b1a-0f9e-4d8c-8b7a-6f5e4d3c2b1a",
+  "source": "/warehouse/exception-management",
+  "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionEscalated",
+  "subject": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+  "time": "2026-10-21T10:01:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:exception-management:events:ExceptionEscalated:v1",
+  "data": {
+    "case_id": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+    "sla_due_at": "2026-10-21T10:00:00Z",
+    "at": "2026-10-21T10:01:00Z"
+  }
+}

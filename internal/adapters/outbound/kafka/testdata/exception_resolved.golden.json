@@ -1,0 +1,18 @@
+{
+  "specversion": "1.0",
+  "id": "8c7d6e5f-4a3b-4c2d-1e0f-9a8b7c6d5e4f",
+  "source": "/warehouse/exception-management",
+  "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionResolved",
+  "subject": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+  "time": "2026-10-21T10:15:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:exception-management:events:ExceptionResolved:v1",
+  "data": {
+    "case_id": "case-6b1e4a2c-8d3f-4e5a-9c7b-2f1d8e4a5c63",
+    "resolution_code": "STOCK_FOUND",
+    "root_cause": "COUNT_ERROR",
+    "note": null,
+    "actor": "jlee",
+    "at": "2026-10-21T10:15:00Z"
+  }
+}
