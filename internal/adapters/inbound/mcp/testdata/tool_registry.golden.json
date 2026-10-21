@@ -1,0 +1,447 @@
+[
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one exception case by id: the dedup identity, status, severity, queue, occurrence_count, escalated flag, assignee, the SLA clock (sla_minutes, sla_due_at), the frozen source_payload, the resolution (resolution_code, root_cause, note, resolved_at) once resolved — manually or auto-resolved, which also carries auto_resolve_rule_id and the correlated event — and the audit trail. Read-only; fails with case-not-found for an unknown id and invalid-case-id for a blank one.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "description": "the exception case id, starting with case-, e.g. case-1b4e28ba",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_exception",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "assignee": {
+          "type": "string"
+        },
+        "audit": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "actor": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "actor",
+              "at"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "auto_resolve_rule_id": {
+          "type": "string"
+        },
+        "case_id": {
+          "type": "string"
+        },
+        "correlated_event_id": {
+          "type": "string"
+        },
+        "correlated_type": {
+          "type": "string"
+        },
+        "escalated": {
+          "type": "boolean"
+        },
+        "last_seen_at": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "occurrence_count": {
+          "type": "integer"
+        },
+        "opened_at": {
+          "type": "string"
+        },
+        "queue": {
+          "type": "string"
+        },
+        "resolution_code": {
+          "type": "string"
+        },
+        "resolved_at": {
+          "type": "string"
+        },
+        "root_cause": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "site_id": {
+          "type": "string"
+        },
+        "sla_due_at": {
+          "type": "string"
+        },
+        "sla_minutes": {
+          "type": "integer"
+        },
+        "source_event_id": {
+          "type": "string"
+        },
+        "source_payload": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "source_subject": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "case_id",
+        "source_type",
+        "source_subject",
+        "status",
+        "severity",
+        "queue",
+        "occurrence_count",
+        "escalated",
+        "opened_at",
+        "last_seen_at",
+        "sla_minutes",
+        "sla_due_at",
+        "source_event_id",
+        "source_payload",
+        "audit",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the exception policy declared for every source type, ordered by source type: the latest version, the severity and queue a new case of that type opens with, sla_minutes, and auto_resolve — null when the type has no rule, else {on_type, within_minutes}, the correlated CloudEvents type and window within which it auto-resolves the case. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "get_exception_policies",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "auto_resolve": {
+                "additionalProperties": false,
+                "properties": {
+                  "on_type": {
+                    "type": "string"
+                  },
+                  "within_minutes": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "on_type",
+                  "within_minutes"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "declared_at": {
+                "type": "string"
+              },
+              "queue": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "sla_minutes": {
+                "type": "integer"
+              },
+              "source_type": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "source_type",
+              "version",
+              "severity",
+              "queue",
+              "sla_minutes",
+              "auto_resolve",
+              "declared_at"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read how the open caseload sits against its SLA clocks at generated_at: open_cases, breached (open cases past their sla_due_at), escalated (cases the SLA sweeper flagged) and the open counts by_severity and by_queue. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "get_sla_report",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "breached": {
+          "type": "integer"
+        },
+        "by_queue": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "by_severity": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "escalated": {
+          "type": "integer"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "open_cases": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "generated_at",
+        "open_cases",
+        "breached",
+        "escalated",
+        "by_severity",
+        "by_queue"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the exception cases of the warehouse, newest opened first, optionally narrowed by status (OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike — resolve activity is part of the record), queue, site and/or the CloudEvents source type that opened them. Each case carries its dedup identity (source_type, source_subject, site_id), severity, queue, occurrence_count (how often the same exception happened), escalated flag, assignee when one exists, the SLA clock (sla_minutes, sla_due_at), the frozen source_payload of the opening fact and the audit trail of accepted transitions. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "queue": {
+          "description": "keep only cases of this queue; omitted means every queue",
+          "type": "string"
+        },
+        "site_id": {
+          "description": "keep only cases of this site; omitted means every site",
+          "type": "string"
+        },
+        "source_type": {
+          "description": "keep only cases opened by this CloudEvents source type; omitted means every source type",
+          "type": "string"
+        },
+        "status": {
+          "description": "keep only cases in this status: OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_open_exceptions",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "assignee": {
+                "type": "string"
+              },
+              "audit": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "actor": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "actor",
+                    "at"
+                  ],
+                  "type": "object"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "auto_resolve_rule_id": {
+                "type": "string"
+              },
+              "case_id": {
+                "type": "string"
+              },
+              "correlated_event_id": {
+                "type": "string"
+              },
+              "correlated_type": {
+                "type": "string"
+              },
+              "escalated": {
+                "type": "boolean"
+              },
+              "last_seen_at": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "occurrence_count": {
+                "type": "integer"
+              },
+              "opened_at": {
+                "type": "string"
+              },
+              "queue": {
+                "type": "string"
+              },
+              "resolution_code": {
+                "type": "string"
+              },
+              "resolved_at": {
+                "type": "string"
+              },
+              "root_cause": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "site_id": {
+                "type": "string"
+              },
+              "sla_due_at": {
+                "type": "string"
+              },
+              "sla_minutes": {
+                "type": "integer"
+              },
+              "source_event_id": {
+                "type": "string"
+              },
+              "source_payload": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "source_subject": {
+                "type": "string"
+              },
+              "source_type": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "case_id",
+              "source_type",
+              "source_subject",
+              "status",
+              "severity",
+              "queue",
+              "occurrence_count",
+              "escalated",
+              "opened_at",
+              "last_seen_at",
+              "sla_minutes",
+              "sla_due_at",
+              "source_event_id",
+              "source_payload",
+              "audit",
+              "version"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    }
+  }
+]
