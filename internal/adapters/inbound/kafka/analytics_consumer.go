@@ -8,6 +8,7 @@ import (
 	"time"
 
 	ce "github.com/cloudevents/sdk-go/v2/event"
+	kafkago "github.com/segmentio/kafka-go"
 
 	"github.com/claudioed/exception-management/internal/adapters/kafka/cloudevents"
 	"github.com/claudioed/exception-management/internal/analytics/report"
@@ -69,6 +70,11 @@ type analyticsData struct {
 // the analytics topic under a FIXED, env-supplied consumer group and folds
 // each event into the analytical model through report.Projection.
 //
+// A brand-new group starts at the EARLIEST offset (kafka-go's default for a
+// group without committed offsets is the latest): the model is a projection
+// that can be rebuilt from retained history, so a fresh projector replays
+// the whole topic instead of skipping to the tail.
+//
 // Outcomes per message (the reference delivery policy of the fleet's
 // analytics read sides): not a CloudEvents 1.0 message: WARN and commit
 // past; a valid CloudEvent of another type: ignored; a known type with an
@@ -81,7 +87,20 @@ func NewAnalyticsConsumer(brokers []string, topic, groupID string, projection re
 	for fullType, kind := range analyticsKinds {
 		handlers[fullType] = func(ctx context.Context, e ce.Event) error { return project(ctx, projection, kind, e) }
 	}
-	return newConsumer("analytics consumer", brokers, topic, groupID, handlers, logger)
+	cfg := readerConfig(brokers, topic, groupID)
+	// kafka-go reads a group's start offset only from the config, and its
+	// default for a group without committed offsets is the LATEST; the
+	// projector's model is rebuildable, so it starts at the earliest.
+	cfg.StartOffset = kafkago.FirstOffset
+	cfg.ErrorLogger = readerErrorLogger(defaultLogger(logger), "analytics consumer", topic)
+	return &Consumer{
+		Name:     "analytics consumer",
+		Topic:    topic,
+		Reader:   kafkago.NewReader(cfg),
+		Handlers: handlers,
+		Logger:   defaultLogger(logger),
+		DLQ:      newDLQWriter(brokers, topic),
+	}
 }
 
 // project maps one decoded CloudEvent of a known kind onto a report.Event
