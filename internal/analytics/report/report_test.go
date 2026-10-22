@@ -64,6 +64,16 @@ func TestValidateRejectsBrokenEvents(t *testing.T) {
 		{"policy auto rule window zero", []Kind{KindExceptionPolicyDeclared}, func(e *Event) {
 			e.AutoResolve = &AutoResolveRule{OnType: "on", WithinMinutes: 0}
 		}},
+		{"opened without source_type", []Kind{KindExceptionOpened}, func(e *Event) { e.SourceType = "" }},
+		{"opened without source_subject", []Kind{KindExceptionOpened}, func(e *Event) { e.SourceSubject = "" }},
+		{"opened without sla_due_at", []Kind{KindExceptionOpened}, func(e *Event) { e.SLADueAt = time.Time{} }},
+		{"opened without queue", []Kind{KindExceptionOpened}, func(e *Event) { e.Queue = "" }},
+		{"triaged without queue", []Kind{KindExceptionTriaged}, func(e *Event) { e.Queue = "" }},
+		{"assigned without assignee", []Kind{KindExceptionAssigned}, func(e *Event) { e.Assignee = "" }},
+		{"escalated without sla_due_at", []Kind{KindExceptionEscalated}, func(e *Event) { e.SLADueAt = time.Time{} }},
+		{"resolved without root cause", []Kind{KindExceptionResolved}, func(e *Event) { e.RootCause = "" }},
+		{"resolved without code", []Kind{KindExceptionResolved}, func(e *Event) { e.ResolutionCode = "" }},
+		{"auto-resolved without rule", []Kind{KindExceptionAutoResolved}, func(e *Event) { e.RuleID = "" }},
 	}
 	for _, c := range cases {
 		for _, kind := range c.kinds {

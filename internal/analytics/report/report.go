@@ -113,6 +113,62 @@ func (e Event) Validate() error {
 	if e.Kind == KindExceptionPolicyDeclared {
 		return e.validatePolicy()
 	}
+	return e.validateCase()
+}
+
+// validateCase checks the payload fields each case fact carries on the wire
+// (the optional ones — site_id, note — may stay unset).
+func (e Event) validateCase() error {
+	switch e.Kind {
+	case KindExceptionOpened:
+		return e.validateOpened()
+	case KindExceptionEscalated:
+		if e.SLADueAt.IsZero() {
+			return e.invalid("without a sla_due_at")
+		}
+	}
+	return e.validateCaseFields()
+}
+
+// validateCaseFields checks the single-field rules of the four facts that
+// carry no due time.
+func (e Event) validateCaseFields() error {
+	switch e.Kind {
+	case KindExceptionTriaged:
+		if e.Severity == "" || e.Queue == "" {
+			return e.invalid("without a severity and a queue")
+		}
+	case KindExceptionAssigned:
+		if e.Assignee == "" {
+			return e.invalid("without an assignee")
+		}
+	case KindExceptionResolved:
+		if e.ResolutionCode == "" || e.RootCause == "" {
+			return e.invalid("without a resolution_code and a root_cause")
+		}
+	case KindExceptionAutoResolved:
+		if e.RuleID == "" || e.CorrelatedType == "" {
+			return e.invalid("without a rule_id and a correlated_type")
+		}
+	}
+	return nil
+}
+
+// validateOpened checks the Opened payload: the source identity, the triage
+// defaults and the due time the SLA reports pivot on.
+func (e Event) validateOpened() error {
+	switch {
+	case e.SourceType == "":
+		return e.invalid("without a source_type")
+	case e.SourceSubject == "":
+		return e.invalid("without a source_subject")
+	case e.Severity == "":
+		return e.invalid("without a severity")
+	case e.Queue == "":
+		return e.invalid("without a queue")
+	case e.SLADueAt.IsZero():
+		return e.invalid("without a sla_due_at")
+	}
 	return nil
 }
 
