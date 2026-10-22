@@ -100,6 +100,47 @@ own app.kubernetes.io/component label; the api Service never selects it
 {{- end }}
 
 {{/*
+Fully qualified names of the analytics components (ADR 0006): the projector
+(the ONLY writer of the analytical database) and the read-only reports
+binary. Each is its own workload with its own app.kubernetes.io/component
+label; a Service never selects more than one of them
+(tests/test_service_selectors.py).
+*/}}
+{{- define "exception-management.analyticsProjectorFullname" -}}
+{{- include "exception-management.fullname" . }}-projector
+{{- end }}
+
+{{- define "exception-management.analyticsReportsFullname" -}}
+{{- include "exception-management.fullname" . }}-reports
+{{- end }}
+
+{{/*
+Name of the Secret holding ANALYTICS_DATABASE_URL: the operator's own
+(analytics.existingSecret) or the one this chart creates from analytics.url
+(analytics-secret.yaml).
+*/}}
+{{- define "exception-management.analyticsSecretName" -}}
+{{- if .Values.analytics.existingSecret -}}
+{{- .Values.analytics.existingSecret -}}
+{{- else -}}
+{{- include "exception-management.fullname" . }}-analytics
+{{- end -}}
+{{- end }}
+
+{{/*
+Analytics guard (ADR 0006): the projector and reports binaries exit at boot
+without ANALYTICS_DATABASE_URL, and the projector without KAFKA_BROKERS
+(always required by this chart) and ANALYTICS_CONSUMER_GROUP (no default).
+Refuse them at render time, only while analytics is on, naming the value.
+*/}}
+{{- define "exception-management.requireAnalyticsConfig" -}}
+{{- if not (or .Values.analytics.url .Values.analytics.existingSecret) -}}
+{{- fail "analytics.enabled is true but neither analytics.url nor analytics.existingSecret is set: the projector and reports binaries exit at boot without ANALYTICS_DATABASE_URL (ADR 0006)." -}}
+{{- end -}}
+{{- $_ := required "analytics.enabled is true but analytics.consumerGroup is empty: the projector exits at boot without ANALYTICS_CONSUMER_GROUP, a stable Kafka group id (ADR 0006)." .Values.analytics.consumerGroup -}}
+{{- end -}}
+
+{{/*
 MANDATORY: real Postgres is the only runtime. The binary exits at boot
 without DATABASE_URL, so a render without a database source is never a
 deployable state: surface it at render time, naming the values.
@@ -148,7 +189,7 @@ mid-drain.
 {{/*
 This service has no modes at all (real Postgres and real Kafka are the only
 runtime), so a *_MODE variable must never be injected through extraEnv — not
-on the api and not on the mcp component.
+on the api, not on the mcp component and not on the analytics components.
 */}}
 {{- define "exception-management.requireNoModeEnv" -}}
 {{- range .Values.extraEnv -}}
@@ -159,6 +200,16 @@ on the api and not on the mcp component.
 {{- range .Values.mcp.extraEnv -}}
 {{- if hasSuffix "_MODE" (toString .name) -}}
 {{- fail (printf "mcp.extraEnv sets %s — the *_MODE variables do not exist: this service has no modes, real Postgres and real Kafka are the only runtime." .name) -}}
+{{- end -}}
+{{- end -}}
+{{- range .Values.analytics.projector.extraEnv -}}
+{{- if hasSuffix "_MODE" (toString .name) -}}
+{{- fail (printf "analytics.projector.extraEnv sets %s — the *_MODE variables do not exist: this service has no modes, real Postgres and real Kafka are the only runtime." .name) -}}
+{{- end -}}
+{{- end -}}
+{{- range .Values.analytics.reports.extraEnv -}}
+{{- if hasSuffix "_MODE" (toString .name) -}}
+{{- fail (printf "analytics.reports.extraEnv sets %s — the *_MODE variables do not exist: this service has no modes, real Postgres and real Kafka are the only runtime." .name) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

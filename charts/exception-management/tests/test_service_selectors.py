@@ -218,7 +218,7 @@ def check_defaults(failures: list[str]) -> None:
     kinds = sorted(d["kind"] for d in defaults)
     if sorted(k for k in kinds if k in {"Deployment", "Service"}) != ["Deployment", "Service"]:
         failures.append("default values must deploy the api only (one Deployment, one Service)")
-    stray = [d["metadata"]["name"] for d in defaults if d["metadata"]["name"].endswith(("-mcp", "-frontend"))]
+    stray = [d["metadata"]["name"] for d in defaults if d["metadata"]["name"].endswith(("-mcp", "-frontend", "-projector", "-reports"))]
     if stray:
         failures.append(f"optional components rendered with default values: {stray}")
     dep = next(d for d in defaults if d.get("kind") == "Deployment")
@@ -244,6 +244,10 @@ def check_refusals(failures: list[str]) -> None:
          BASE + ["--set", "extraEnv[0].name=EXCEPTIONS_MODE", "--set", "extraEnv[0].value=permissive"], "EXCEPTIONS_MODE"),
         ("a *_MODE variable through mcp.extraEnv",
          BASE + ["--set", "mcp.enabled=true", "--set", "mcp.extraEnv[0].name=MCP_MODE", "--set", "mcp.extraEnv[0].value=stdio"], "MCP_MODE"),
+        ("analytics on without a DSN source",
+         BASE + ["--set", "analytics.enabled=true"], "ANALYTICS_DATABASE_URL"),
+        ("analytics on with an empty consumer group",
+         BASE + ["--set", "analytics.enabled=true", "--set", "analytics.url=postgres://u@h/a", "--set", "analytics.consumerGroup="], "analytics.consumerGroup"),
         ("a short grace period", BASE + ["--set", "terminationGracePeriodSeconds=20"], "terminationGracePeriodSeconds"),
     ):
         result = helm_template(args)
@@ -333,11 +337,102 @@ def check_frontend(failures: list[str]) -> None:
         failures.append("the frontend Service must stay ClusterIP (the Nginx web gateway owns exposure)")
 
 
+def check_analytics(failures: list[str]) -> None:
+    """The analytics read side (ADR 0006): the projector Deployment (NO
+    Service of its own) and the reports Deployment + Service, each pinned to
+    its own component so a Service selects exactly one Deployment."""
+    analytics = ["--set", "analytics.enabled=true", "--set", "analytics.url=postgres://u@h/analytics"]
+    docs = render(BASE + analytics)
+    deployments = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Deployment"}
+    services = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Service"}
+
+    expected_deps = {RELEASE: "api", f"{RELEASE}-projector": "analytics-projector", f"{RELEASE}-reports": "analytics-reports"}
+    if set(deployments) != set(expected_deps):
+        failures.append(f"expected Deployments {sorted(expected_deps)} with analytics on, got {sorted(deployments)}")
+        return
+    # The projector deliberately has NO Service (admin port only): exactly
+    # the api and the reports Service may exist.
+    if set(services) != {RELEASE, f"{RELEASE}-reports"}:
+        failures.append(f"expected Services [{RELEASE}, {RELEASE}-reports] with analytics on (no projector Service), got {sorted(services)}")
+    for name, component in expected_deps.items():
+        labels = deployments[name]["metadata"].get("labels", {})
+        if labels.get("app.kubernetes.io/component") != component:
+            failures.append(f"Deployment {name} must be labelled component={component}")
+        match_labels = deployments[name]["spec"]["selector"].get("matchLabels") or {}
+        if match_labels.get("app.kubernetes.io/component") != component:
+            failures.append(f"Deployment {name} selector.matchLabels lacks app.kubernetes.io/component={component}")
+        if not matches(match_labels, pod_labels_of(deployments[name])):
+            failures.append(f"Deployment {name} pod labels do not satisfy its own selector")
+
+    # The real invariant: each Service selects exactly one Deployment.
+    for svc_name, svc in services.items():
+        sel = selector_of(svc)
+        hit = [d for d, dep in deployments.items() if matches(sel, pod_labels_of(dep))]
+        if len(hit) != 1:
+            failures.append(f"Service {svc_name} selects {len(hit)} Deployments {sorted(hit)}; expected exactly 1")
+
+    projector = deployments[f"{RELEASE}-projector"]
+    reports = deployments[f"{RELEASE}-reports"]
+    if command_of(projector) != ["/app/exceptions-projector"]:
+        failures.append("the projector Deployment must run /app/exceptions-projector")
+    if command_of(reports) != ["/app/exceptions-reports"]:
+        failures.append("the reports Deployment must run /app/exceptions-reports")
+
+    prj_env = set(env_names(projector))
+    for want in ("ANALYTICS_DATABASE_URL", "KAFKA_BROKERS", "ANALYTICS_CONSUMER_GROUP", "ADMIN_ADDR", "LOG_LEVEL"):
+        if want not in prj_env:
+            failures.append(f"the projector Deployment does not render {want}")
+    # The projector never opens the OLTP database and reads none of cmd/api's
+    # consumer groups.
+    prj_stray = ({"DATABASE_URL", "MIGRATIONS_DATABASE_URL"}
+                 | {n for n in prj_env if n.endswith("_CONSUMER_GROUP") and n != "ANALYTICS_CONSUMER_GROUP"}) & prj_env
+    prj_stray |= set(mode_names(list(prj_env)))
+    if prj_stray:
+        failures.append(f"the projector Deployment must not get OLTP/consumer env: {sorted(prj_stray)}")
+
+    rep_env = set(env_names(reports))
+    for want in ("ANALYTICS_DATABASE_URL", "HTTP_ADDR", "LOG_LEVEL"):
+        if want not in rep_env:
+            failures.append(f"the reports Deployment does not render {want}")
+    rep_stray = ({"KAFKA_BROKERS", "DATABASE_URL", "MIGRATIONS_DATABASE_URL"}
+                 | {n for n in rep_env if n.endswith("_CONSUMER_GROUP")}) & rep_env
+    rep_stray |= set(mode_names(list(rep_env)))
+    if rep_stray:
+        failures.append(f"the reports Deployment must not get Kafka/OLTP/consumer env (read-only, never dials Kafka): {sorted(rep_stray)}")
+
+    # Both get the analytical DSN from the analytics Secret, never from values.
+    for dep, label in ((projector, "projector"), (reports, "reports")):
+        dsn = next((e for e in env_of(dep) if e["name"] == "ANALYTICS_DATABASE_URL"), None)
+        ref = (dsn or {}).get("valueFrom", {}).get("secretKeyRef", {})
+        if not ref:
+            failures.append(f"the {label} ANALYTICS_DATABASE_URL must come from a Secret (secretKeyRef)")
+        elif ref.get("name") != f"{RELEASE}-analytics" or ref.get("key") != "ANALYTICS_DATABASE_URL":
+            failures.append(f"the {label} ANALYTICS_DATABASE_URL secretKeyRef is {ref}")
+
+    # Every optional component together: api + mcp + frontend + projector +
+    # reports, each labelled, each Service selecting exactly one Deployment.
+    everything = render(BASE + analytics + ["--set", "mcp.enabled=true", "--set", "frontend.enabled=true"])
+    all_deps = {d["metadata"]["name"]: d for d in everything if d.get("kind") == "Deployment"}
+    all_svcs = {d["metadata"]["name"]: d for d in everything if d.get("kind") == "Service"}
+    want = {RELEASE: "api", f"{RELEASE}-mcp": "mcp", f"{RELEASE}-frontend": "frontend",
+            f"{RELEASE}-projector": "analytics-projector", f"{RELEASE}-reports": "analytics-reports"}
+    if set(all_deps) != set(want):
+        failures.append(f"expected every component's Deployment {sorted(want)}, got {sorted(all_deps)}")
+    if set(all_svcs) != {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-frontend", f"{RELEASE}-reports"}:
+        failures.append(f"expected Services for api/mcp/frontend/reports only, got {sorted(all_svcs)}")
+    for svc_name, svc in all_svcs.items():
+        sel = selector_of(svc)
+        hit = [d for d, dep in all_deps.items() if matches(sel, pod_labels_of(dep))]
+        if len(hit) != 1:
+            failures.append(f"Service {svc_name} selects {len(hit)} Deployments {sorted(hit)}; expected exactly 1")
+
+
 def main() -> int:
     failures: list[str] = []
 
     check_selectors(render(ENABLE_EVERYTHING), failures)
     check_frontend(failures)
+    check_analytics(failures)
     check_defaults(failures)
     check_refusals(failures)
 
@@ -346,12 +441,13 @@ def main() -> int:
             print(f"FAIL: {f}")
         return 1
 
-    print("PASS: every Service selects exactly one Deployment (api, mcp, frontend); mcp and frontend are off "
-          "by default; the frontend pod carries no env and its Service stays ClusterIP; "
+    print("PASS: every Service selects exactly one Deployment (api, mcp, frontend, analytics projector/reports); "
+          "mcp, frontend and analytics are off by default; the projector has no Service and never sees OLTP env, "
+          "the reports binary never dials Kafka; the frontend pod carries no env and its Service stays ClusterIP; "
           "every cmd/api env var has a dedicated value and no *_MODE is rendered; "
           "the chart refuses to render without a database source, without brokers, "
-          "with an empty consumer group, with a *_MODE injected through extraEnv or "
-          "mcp.extraEnv, or with a too-short termination grace period")
+          "with an empty consumer group, with analytics on but no DSN source or consumer group, "
+          "with a *_MODE injected through extraEnv or mcp.extraEnv, or with a too-short termination grace period")
     return 0
 
 

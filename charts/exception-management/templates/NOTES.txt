@@ -30,3 +30,12 @@ yet shows as consumer retry logs, not as unreadiness.
 
 MCP server (read-only, no auth): {{ include "exception-management.mcpFullname" . }}:{{ .Values.mcp.service.port }}/mcp (Streamable HTTP; tools: list_open_exceptions, get_exception, get_exception_policies, get_sla_report).
 {{- end }}
+{{- if .Values.analytics.enabled }}
+
+Analytics read side (ADR 0006, projector + reports):
+  projector {{ include "exception-management.analyticsProjectorFullname" . }} (no Service; /healthz and /readyz on :{{ .Values.analytics.projector.adminPort }})
+    group {{ .Values.analytics.consumerGroup }} <- warehouse.exception-management.analytics
+  reports   {{ include "exception-management.analyticsReportsFullname" . }}:{{ .Values.analytics.reports.service.port }}
+    curl .../reports/root-cause-frequency, /reports/mean-time-to-resolve, /reports/sla-breach-rate, /reports/freshness
+The analytical database is separate from the OLTP one (ANALYTICS_DATABASE_URL).
+{{- end }}
