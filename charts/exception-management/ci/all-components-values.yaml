@@ -18,9 +18,36 @@ config:
   inventoryExceptionsConsumerGroup: "exception-management-inventory"
   returnsExceptionsConsumerGroup: "exception-management-returns"
 
-# The optional mcp component on, together with the api.
+# The optional mcp component on, together with the api (and its Kong route:
+# mcp.route is off by default in the chart's values).
 mcp:
   enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+
+# The Gateway API route + Kong plugins on as well, with the real host path
+# and parent (the same values warehouse-infra sets in production).
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: warehouse-gateway
+      namespace: kong
+      sectionName: http
+  hosts:
+    - path: /api/exception-management
+      pathType: PathPrefix
+kongPlugins:
+  cors:
+    enabled: true
+    origin: "http://localhost"
+  prometheus:
+    enabled: true
+  opentelemetry:
+    enabled: true
 
 # The optional frontend component (the exceptions_mfe Module Federation
 # remote, component=frontend) on as well: every optional component together.
