@@ -11,13 +11,15 @@ selector.matchLabels and its pod labels, and every Service selects on it, so
 each Service selects EXACTLY ONE Deployment. This test fails if that ever
 stops being true.
 
-Components: api (always) and mcp (the read-only ops-agent surface, default
-off). The enabled render runs both TOGETHER.
+Components: api (always), mcp (the read-only ops-agent surface, default off)
+and frontend (the exceptions_mfe Module Federation remote, default off). The
+enabled renders run the components TOGETHER.
 
 It also asserts the real runtime: the mandatory env (database secret, brokers,
 the six pinned consumer-group ids) is rendered, no *_MODE variable is ever
 rendered (this service has no modes), and unset optional values stay absent so
-the binary's defaults apply.
+the binary's defaults apply. The frontend is a static nginx pod: it carries NO
+env at all (never a DSN, never brokers, never a consumer group).
 
 Run: python3 charts/exception-management/tests/test_service_selectors.py
 Needs: helm, PyYAML.
@@ -216,7 +218,7 @@ def check_defaults(failures: list[str]) -> None:
     kinds = sorted(d["kind"] for d in defaults)
     if sorted(k for k in kinds if k in {"Deployment", "Service"}) != ["Deployment", "Service"]:
         failures.append("default values must deploy the api only (one Deployment, one Service)")
-    stray = [d["metadata"]["name"] for d in defaults if d["metadata"]["name"].endswith("-mcp")]
+    stray = [d["metadata"]["name"] for d in defaults if d["metadata"]["name"].endswith(("-mcp", "-frontend"))]
     if stray:
         failures.append(f"optional components rendered with default values: {stray}")
     dep = next(d for d in defaults if d.get("kind") == "Deployment")
@@ -249,10 +251,93 @@ def check_refusals(failures: list[str]) -> None:
             failures.append(f"chart rendered (or failed for another reason) {label}")
 
 
+def check_component_set(extra_args: list[str], expected: dict[str, str], failures: list[str]) -> None:
+    """Render BASE + extra_args and assert the per-component invariants:
+    exactly the expected Deployment/Service set, every one pinned to its own
+    app.kubernetes.io/component, and each Service selecting EXACTLY ONE
+    Deployment."""
+    docs = render(BASE + extra_args)
+    services = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Service"}
+    deployments = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Deployment"}
+
+    if set(deployments) != set(expected):
+        failures.append(f"expected Deployments {sorted(expected)}, got {sorted(deployments)} ({extra_args})")
+        return
+    if set(services) != set(expected):
+        failures.append(f"expected a Service per Deployment, got {sorted(services)} ({extra_args})")
+
+    for name, component in expected.items():
+        if name in services and selector_of(services[name]).get("app.kubernetes.io/component") != component:
+            failures.append(f"Service {name} selector must pin component={component}")
+        if name in deployments:
+            labels = deployments[name]["metadata"].get("labels", {})
+            if labels.get("app.kubernetes.io/component") != component:
+                failures.append(f"Deployment {name} must be labelled component={component}")
+        if name in deployments:
+            match_labels = deployments[name]["spec"]["selector"].get("matchLabels") or {}
+            if "app.kubernetes.io/component" not in match_labels:
+                failures.append(f"Deployment {name} selector.matchLabels lacks app.kubernetes.io/component")
+            if not matches(match_labels, pod_labels_of(deployments[name])):
+                failures.append(f"Deployment {name} pod labels do not satisfy its own selector")
+
+    for svc_name, svc in services.items():
+        sel = selector_of(svc)
+        hit = [d for d, dep in deployments.items() if matches(sel, pod_labels_of(dep))]
+        if len(hit) != 1:
+            failures.append(f"Service {svc_name} selects {len(hit)} Deployments {sorted(hit)}; expected exactly 1")
+
+    for name, svc in services.items():
+        dep = deployments.get(name)
+        if dep is None:
+            continue
+        ports = {p["name"] for p in dep["spec"]["template"]["spec"]["containers"][0].get("ports", [])}
+        if "http" not in ports:
+            failures.append(f"the {name} container does not expose the named port 'http' the Service targets")
+
+
+def check_frontend(failures: list[str]) -> None:
+    # frontend alone with the api, and all three components together.
+    check_component_set(
+        ["--set", "frontend.enabled=true"],
+        {RELEASE: "api", f"{RELEASE}-frontend": "frontend"},
+        failures,
+    )
+    check_component_set(
+        ["--set", "mcp.enabled=true", "--set", "frontend.enabled=true"],
+        {RELEASE: "api", f"{RELEASE}-mcp": "mcp", f"{RELEASE}-frontend": "frontend"},
+        failures,
+    )
+
+    docs = render(BASE + ["--set", "frontend.enabled=true"])
+    fe = next(
+        (d for d in docs if d.get("kind") == "Deployment" and d["metadata"]["name"] == f"{RELEASE}-frontend"),
+        None,
+    )
+    if fe is None:
+        failures.append("the frontend Deployment was not rendered with frontend.enabled=true")
+        return
+    # A static nginx pod: no env AT ALL -- it never sees the DSN, the brokers
+    # or a consumer group (it serves bytes; the SPA reads its API origin at
+    # runtime from the console's /config.json).
+    if env_of(fe):
+        failures.append(f"the frontend Deployment must carry no env (static nginx), got {env_names(fe)}")
+    container = fe["spec"]["template"]["spec"]["containers"][0]
+    for probe in ("livenessProbe", "readinessProbe"):
+        if container.get(probe, {}).get("httpGet", {}).get("path") != "/healthz":
+            failures.append(f"the frontend {probe} must hit /healthz (nginx's own probe endpoint)")
+    fesvc = next(
+        (d for d in docs if d.get("kind") == "Service" and d["metadata"]["name"] == f"{RELEASE}-frontend"),
+        None,
+    )
+    if fesvc is not None and fesvc["spec"]["type"] != "ClusterIP":
+        failures.append("the frontend Service must stay ClusterIP (the Nginx web gateway owns exposure)")
+
+
 def main() -> int:
     failures: list[str] = []
 
     check_selectors(render(ENABLE_EVERYTHING), failures)
+    check_frontend(failures)
     check_defaults(failures)
     check_refusals(failures)
 
@@ -261,7 +346,8 @@ def main() -> int:
             print(f"FAIL: {f}")
         return 1
 
-    print("PASS: every Service selects exactly one Deployment (api, mcp); mcp is off by default; "
+    print("PASS: every Service selects exactly one Deployment (api, mcp, frontend); mcp and frontend are off "
+          "by default; the frontend pod carries no env and its Service stays ClusterIP; "
           "every cmd/api env var has a dedicated value and no *_MODE is rendered; "
           "the chart refuses to render without a database source, without brokers, "
           "with an empty consumer group, with a *_MODE injected through extraEnv or "

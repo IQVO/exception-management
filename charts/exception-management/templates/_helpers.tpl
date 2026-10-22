@@ -90,6 +90,16 @@ selects it (tests/test_service_selectors.py).
 {{- end }}
 
 {{/*
+Fully qualified name of the optional frontend component (the exceptions_mfe
+Module Federation remote served by nginx). It is its own workload with its
+own app.kubernetes.io/component label; the api Service never selects it
+(tests/test_service_selectors.py).
+*/}}
+{{- define "exception-management.frontendFullname" -}}
+{{- include "exception-management.fullname" . }}-frontend
+{{- end }}
+
+{{/*
 MANDATORY: real Postgres is the only runtime. The binary exits at boot
 without DATABASE_URL, so a render without a database source is never a
 deployable state: surface it at render time, naming the values.
