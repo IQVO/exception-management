@@ -25,12 +25,16 @@ type Writer interface {
 // BatchTimeout. Constructing it never dials.
 //
 // EventsTopic and DeadLetterTopic default to TopicEvents and DeadLetterTopic;
-// the fields exist so the integration proof can point the same code at
-// isolated per-test topics.
+// AnalyticsTopic defaults to TopicAnalytics (the twin of every encoded fact,
+// ADR 0006). The fields exist so the integration proof can point the same
+// code at isolated per-test topics.
 type RelaySink struct {
 	writer Writer
 	// EventsTopic is where encoded facts go (TopicEvents when empty).
 	EventsTopic string
+	// AnalyticsTopic is where the analytics twins go (TopicAnalytics when
+	// empty).
+	AnalyticsTopic string
 	// DeadLetterTopic is where unencodable rows are parked raw
 	// (DeadLetterTopic when empty).
 	DeadLetterTopic string
@@ -48,6 +52,13 @@ func (s *RelaySink) eventsTopic() string {
 		return TopicEvents
 	}
 	return s.EventsTopic
+}
+
+func (s *RelaySink) analyticsTopic() string {
+	if s.AnalyticsTopic == "" {
+		return TopicAnalytics
+	}
+	return s.AnalyticsTopic
 }
 
 func (s *RelaySink) deadLetterTopic() string {
@@ -117,8 +128,11 @@ func (s *RelaySink) Handle(ctx context.Context, row outbox.Row) error {
 		return s.deadLetter(ctx, row, fmt.Errorf("no published wire shape for %s.%s", row.Fact.Entity, row.Fact.Event))
 	}
 	for i := range msgs {
-		if msgs[i].Topic == TopicEvents {
+		switch msgs[i].Topic {
+		case TopicEvents:
 			msgs[i].Topic = s.eventsTopic()
+		case TopicAnalytics:
+			msgs[i].Topic = s.analyticsTopic()
 		}
 	}
 	out, err := toKafka(msgs)

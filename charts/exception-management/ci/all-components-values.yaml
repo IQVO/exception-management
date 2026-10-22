@@ -26,3 +26,11 @@ mcp:
 # remote, component=frontend) on as well: every optional component together.
 frontend:
   enabled: true
+
+# The analytics components (ADR 0006) on too: api + mcp + frontend +
+# projector + reports, so a template that renders alone but collides with
+# another is caught by `helm lint`.
+analytics:
+  enabled: true
+  existingSecret: "exception-management-analytics-db"
+  consumerGroup: "exception-management-analytics"

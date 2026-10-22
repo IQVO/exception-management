@@ -188,6 +188,9 @@ expect_refusal "an empty returns group" "config.returnsExceptionsConsumerGroup" 
 expect_refusal "a short grace period" "terminationGracePeriodSeconds" "${base[@]}" --set terminationGracePeriodSeconds=20
 expect_refusal "a *_MODE variable through extraEnv" "_MODE" "${base[@]}" --set 'extraEnv[0].name=EXCEPTIONS_MODE' --set 'extraEnv[0].value=permissive'
 expect_refusal "a *_MODE variable through mcp.extraEnv" "_MODE" "${base[@]}" --set mcp.enabled=true --set 'mcp.extraEnv[0].name=MCP_MODE' --set 'mcp.extraEnv[0].value=stdio'
+expect_refusal "a *_MODE variable through analytics.projector.extraEnv" "_MODE" "${base[@]}" --set analytics.enabled=true --set analytics.url=postgres://u@h/a --set 'analytics.projector.extraEnv[0].name=PROJECTOR_MODE' --set 'analytics.projector.extraEnv[0].value=memory'
+expect_refusal "analytics on but no DSN source" "analytics.url nor analytics.existingSecret" "${base[@]}" --set analytics.enabled=true
+expect_refusal "analytics on but an empty consumer group" "analytics.consumerGroup" "${base[@]}" --set analytics.enabled=true --set analytics.url=postgres://u@h/a --set analytics.consumerGroup=
 expect_refusal "mcp on but no database source" "database.url or database.existingSecret" --set kafka.brokers=k:9092 --set mcp.enabled=true
 
 # --- the optional mcp component ---------------------------------------------------
@@ -268,6 +271,59 @@ no_mode "frontend Deployment" "$fe_dep"
 all3="$(render "${base[@]}" --set mcp.enabled=true --set frontend.enabled=true)"
 for component in api mcp frontend; do
   grep -q "app.kubernetes.io/component: $component\$" <<<"$all3" || fail "$component was not rendered when mcp.enabled=true and frontend.enabled=true"
+done
+
+# --- the optional analytics components (ADR 0006) ---------------------------
+# Off by default: the default render is the api alone.
+if grep -q 'app.kubernetes.io/component: analytics-' <<<"$default_render"; then
+  fail "the analytics components must not render by default"
+fi
+
+# On: the projector Deployment (no Service) and the reports Deployment +
+# Service, each pinned to its own component label; the reports Service
+# selects ONLY the reports pods.
+analytics_args=(--set analytics.enabled=true --set analytics.url=postgres://u@h/analytics)
+prj_dep="$(render_only projector-deployment.yaml "${base[@]}" "${analytics_args[@]}")"
+rep_docs="$(render_only reports-deployment.yaml "${base[@]}" "${analytics_args[@]}")"
+grep -q 'app.kubernetes.io/component: analytics-projector' <<<"$prj_dep" || fail "the projector Deployment is not labelled component=analytics-projector"
+grep -q 'command: \["/app/exceptions-projector"\]' <<<"$prj_dep" || fail "the projector Deployment must run /app/exceptions-projector"
+if grep -q 'kind: Service' <<<"$prj_dep"; then fail "the projector must not render a Service (admin port only)"; fi
+grep -q 'app.kubernetes.io/component: analytics-reports' <<<"$rep_docs" || fail "the reports Deployment/Service is not labelled component=analytics-reports"
+grep -q 'command: \["/app/exceptions-reports"\]' <<<"$rep_docs" || fail "the reports Deployment must run /app/exceptions-reports"
+grep -A4 'app.kubernetes.io/component: analytics-reports' <<<"$rep_docs" | grep -q 'selector:' || fail "the reports Service must select component=analytics-reports"
+# The projector gets the analytical DSN from a Secret, never from a ConfigMap.
+grep -A4 'name: ANALYTICS_DATABASE_URL$' <<<"$prj_dep" | grep -q 'secretKeyRef:' || fail "the projector ANALYTICS_DATABASE_URL must come from a Secret"
+# The projector never sees OLTP env; the reports binary never dials Kafka.
+if grep -Eq 'name: (DATABASE_URL|MIGRATIONS_DATABASE_URL)$' <<<"$prj_dep"; then
+  fail "the projector Deployment must not get OLTP env (it never opens the OLTP database)"
+fi
+if grep -Eq 'name: (KAFKA_BROKERS|ANALYTICS_CONSUMER_GROUP|[A-Z]+_CONSUMER_GROUP)$' <<<"$rep_docs"; then
+  fail "the reports Deployment must not get Kafka/consumer env (read-only, never dials Kafka)"
+fi
+no_mode "projector Deployment" "$prj_dep"
+no_mode "reports Deployment" "$rep_docs"
+# analytics.url lands in the chart's analytics Secret; existingSecret suppresses it.
+an_secret="$(render_only analytics-secret.yaml "${base[@]}" "${analytics_args[@]}")"
+grep -q 'ANALYTICS_DATABASE_URL: "postgres://u@h/analytics"' <<<"$an_secret" || fail "analytics.url does not land in the analytics Secret"
+an_existing="$(render "${base[@]}" --set analytics.enabled=true --set analytics.existingSecret=my-analytics-db)"
+if grep -q 'kind: Secret' <<<"$(render_only analytics-secret.yaml "${base[@]}" --set analytics.enabled=true --set analytics.existingSecret=my-analytics-db 2>/dev/null)"; then
+  fail "an analytics.existingSecret must suppress the chart analytics Secret"
+fi
+grep -A4 'name: ANALYTICS_DATABASE_URL$' <<<"$an_existing" | grep -q 'name: my-analytics-db' || fail "an analytics.existingSecret is not referenced by ANALYTICS_DATABASE_URL"
+# The consumer group and admin/http addr reach the containers.
+[[ "$(env_value "$prj_dep" ANALYTICS_CONSUMER_GROUP)" == "exception-management-analytics" ]] || fail "analytics.consumerGroup does not reach ANALYTICS_CONSUMER_GROUP"
+[[ "$(env_value "$prj_dep" ADMIN_ADDR)" == ":8091" ]] || fail "analytics.projector.adminAddr does not reach ADMIN_ADDR"
+[[ "$(env_value "$rep_docs" HTTP_ADDR)" == ":8092" ]] || fail "analytics.reports.httpAddr does not reach HTTP_ADDR"
+# Every env literal of the two analytics binaries is rendered (chart vs binary).
+prj_full="$(render_only projector-deployment.yaml "${everything[@]}")"
+rep_full="$(render_only reports-deployment.yaml "${everything[@]}")"
+assert_renders_env "projector" "$prj_full" exceptions-projector
+assert_renders_env "reports" "$rep_full" exceptions-reports
+
+# api + mcp + frontend + analytics together: every component renders, each labelled.
+all4="$(render "${base[@]}" --set mcp.enabled=true --set frontend.enabled=true "${analytics_args[@]}")"
+for component in api mcp frontend analytics-projector analytics-reports; do
+  grep -q "app.kubernetes.io/component: $component\$" <<<"$all4" || fail "$component was not rendered when every optional component is on"
 done
 
 echo "PASS: exception-management chart render assertions"

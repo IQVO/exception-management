@@ -235,3 +235,69 @@ frontend:
     requests:
       cpu: 50m
       memory: 64Mi
+
+# --- Analytics read side (docs/adr/0006) ---
+# The exception analytics data product: the projector (cmd/exceptions-projector,
+# the ONLY writer of the analytical database, consuming the analytics topic
+# warehouse.exception-management.analytics) and the read-only reports binary
+# (cmd/exceptions-reports, GET /reports/root-cause-frequency,
+# /reports/mean-time-to-resolve, /reports/sla-breach-rate and
+# /reports/freshness). DISABLED by default: the default render is unchanged.
+#
+# Enabling it renders the projector Deployment (component
+# analytics-projector, /healthz + /readyz on :8091, no Service) and the
+# reports Deployment + Service <fullname>-reports:80 (component
+# analytics-reports, :8092), plus a Secret with ANALYTICS_DATABASE_URL when
+# analytics.url is set. The chart refuses to render analytics without a DSN
+# source (analytics.url or analytics.existingSecret) or without a consumer
+# group: the binaries exit at boot otherwise (crash-loop). Kafka brokers are
+# already mandatory for every render of this chart.
+#
+# Deliberately NOT HPA-scalable: the projector keeps per-process
+# consumer/offset state -- replica counts are fixed values.
+analytics:
+  enabled: false
+  # The analytical database is SEPARATE from database.* (OLTP): the
+  # projector has no credentials on OLTP data and the reports pool is
+  # read-only. Direct DSN (no PgBouncer): the projector runs the embedded
+  # analytical migrations through it.
+  url: ""
+  existingSecret: ""
+  existingSecretKey: "ANALYTICS_DATABASE_URL"
+  # ANALYTICS_CONSUMER_GROUP: the projector's STABLE consumer group (no
+  # default in the binary): a rescheduled pod resumes from its committed
+  # offsets, and a brand-new group replays from the earliest retained offset
+  # (the backfill).
+  consumerGroup: "exception-management-analytics"
+  projector:
+    replicaCount: 1
+    # ADMIN_ADDR (/healthz and /readyz) and its container port.
+    adminAddr: ":8091"
+    adminPort: 8091
+    # Extra env vars appended to the projector container as a raw list. A
+    # *_MODE name is refused at render time (templates/_helpers.tpl).
+    extraEnv: []
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  reports:
+    replicaCount: 1
+    httpAddr: ":8092"
+    service:
+      type: ClusterIP
+      port: 80
+      targetPort: 8092
+    # Extra env vars appended to the reports container as a raw list. A
+    # *_MODE name is refused at render time (templates/_helpers.tpl).
+    extraEnv: []
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi

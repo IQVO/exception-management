@@ -36,7 +36,8 @@ import (
 // to Kafka.
 
 const (
-	topicEvents = "warehouse.exception-management.events"
+	topicEvents    = "warehouse.exception-management.events"
+	topicAnalytics = "warehouse.exception-management.analytics"
 
 	typePolicyDeclared = "com.warehouse.wes.exception-management.exceptionpolicy.ExceptionPolicyDeclared"
 	sourceType         = "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed"
@@ -238,6 +239,9 @@ func TestRealEntryPointServesRestAndRelaysToKafka(t *testing.T) {
 	// declaration fact from the relay's topic.
 	t.Run("policy declare replays and relays", func(t *testing.T) {
 		kafkatest.CreateTopic(t, topicEvents)
+		// The relay writes every fact's analytics twin too (ADR 0006); the
+		// test broker has auto-creation OFF, so the topic must exist first.
+		kafkatest.CreateTopic(t, topicAnalytics)
 		body := `{"severity":"HIGH","queue":"cps-front","slaMinutes":30}`
 		target := "/exception-policies/" + sourceType
 		first := s.call(http.MethodPut, target, body, http.StatusCreated, idemKey("k-1"))
@@ -299,6 +303,27 @@ func TestRealEntryPointServesRestAndRelaysToKafka(t *testing.T) {
 		if data.SourceType != sourceType || data.Version != 1 || data.Severity != "HIGH" ||
 			data.Queue != "cps-front" || data.SLAMinutes != 30 || data.AutoResolve != nil {
 			t.Fatalf("declaration data = %+v", data)
+		}
+
+		// The analytics twin left through the same relay pass: same id and
+		// payload, dataschema stream "analytics" (ADR 0006).
+		twin := kafkatest.ReadN(t, topicAnalytics, 1, 30*time.Second)[0]
+		var twinEnv struct {
+			ID         string          `json:"id"`
+			Type       string          `json:"type"`
+			DataSchema string          `json:"dataschema"`
+			Data       json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(twin.Value, &twinEnv); err != nil {
+			t.Fatalf("the twin is not a CloudEvent: %v: %s", err, twin.Value)
+		}
+		if twinEnv.ID != env.ID || twinEnv.Type != typePolicyDeclared ||
+			twinEnv.DataSchema != "urn:warehouse:exception-management:analytics:ExceptionPolicyDeclared:v1" ||
+			string(twinEnv.Data) != string(env.Data) {
+			t.Fatalf("analytics twin = %+v (data %s), want the same id/type/data with the analytics dataschema", twinEnv, twinEnv.Data)
+		}
+		if n := kafkatest.EndOffset(t, topicAnalytics); n != 1 {
+			t.Fatalf("%s holds %d messages, want 1", topicAnalytics, n)
 		}
 
 		// The restart proof: nothing lost, still exactly one row per key. The
