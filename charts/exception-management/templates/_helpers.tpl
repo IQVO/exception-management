@@ -213,3 +213,19 @@ on the api, not on the mcp component and not on the analytics components.
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Comma-joined names of this chart's enabled KongPlugins, for the
+konghq.com/plugins annotation on the HTTPRoutes this chart renders
+(httproute.yaml, mcp-route.yaml). Empty string (annotation omitted) when
+none are enabled.
+*/}}
+{{- define "exception-management.kongPluginNames" -}}
+{{- $names := list -}}
+{{- range $name, $cfg := .Values.kongPlugins -}}
+{{- if $cfg.enabled -}}
+{{- $names = append $names (printf "%s-%s" (include "exception-management.fullname" $) $name) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $names -}}
+{{- end -}}
