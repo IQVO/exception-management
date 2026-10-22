@@ -45,8 +45,10 @@ func openedRow() outbox.Row {
 	}
 }
 
-// A known row is encoded and written to the events topic with the aggregate
-// id as the key and exactly the content-type header.
+// A known row is encoded and written as the TWO twins: the integration one
+// on the events topic and the analytics one on the analytics topic, both
+// with the aggregate id as the key and exactly the content-type header
+// (ADR 0006).
 func TestRelaySinkHandleWritesEncodedEvent(t *testing.T) {
 	w := &fakeWriter{}
 	sink := kafka.NewRelaySinkWithWriter(w)
@@ -55,33 +57,38 @@ func TestRelaySinkHandleWritesEncodedEvent(t *testing.T) {
 		t.Fatalf("Handle: %v", err)
 	}
 	msgs := w.last()
-	if len(msgs) != 1 {
-		t.Fatalf("%d messages, want 1", len(msgs))
+	if len(msgs) != 2 {
+		t.Fatalf("%d messages, want 2 (integration + analytics)", len(msgs))
 	}
-	m := msgs[0]
-	if m.Topic != kafka.TopicEvents || string(m.Key) != "case-1" {
-		t.Fatalf("topic %q key %q", m.Topic, m.Key)
-	}
-	if len(m.Headers) != 1 || m.Headers[0].Key != "content-type" {
-		t.Fatalf("headers = %+v, want exactly the content-type", m.Headers)
-	}
-	if len(m.Value) == 0 || m.Value[0] != '{' {
-		t.Fatalf("value is not the CloudEvents JSON: %s", m.Value)
+	for i, wantTopic := range []string{kafka.TopicEvents, kafka.TopicAnalytics} {
+		m := msgs[i]
+		if m.Topic != wantTopic || string(m.Key) != "case-1" {
+			t.Fatalf("twin %d: topic %q key %q, want %q", i, m.Topic, m.Key, wantTopic)
+		}
+		if len(m.Headers) != 1 || m.Headers[0].Key != "content-type" {
+			t.Fatalf("twin %d: headers = %+v, want exactly the content-type", i, m.Headers)
+		}
+		if len(m.Value) == 0 || m.Value[0] != '{' {
+			t.Fatalf("twin %d: value is not the CloudEvents JSON: %s", i, m.Value)
+		}
 	}
 }
 
-// The EventsTopic field redirects the SAME encoding to another topic (the
-// integration proof's isolated topics).
+// The EventsTopic/AnalyticsTopic fields redirect the SAME encodings to other
+// topics (the integration proof's isolated topics).
 func TestRelaySinkHandleHonorsTopicOverride(t *testing.T) {
 	w := &fakeWriter{}
 	sink := kafka.NewRelaySinkWithWriter(w)
 	sink.EventsTopic = "t.itest-events"
+	sink.AnalyticsTopic = "t.itest-analytics"
 
 	if err := sink.Handle(context.Background(), openedRow()); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.last()[0].Topic; got != "t.itest-events" {
-		t.Fatalf("topic = %q, want the override", got)
+	for i, want := range []string{"t.itest-events", "t.itest-analytics"} {
+		if got := w.last()[i].Topic; got != want {
+			t.Fatalf("twin %d topic = %q, want %q", i, got, want)
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,12 +133,16 @@ func decodeJSON(t *testing.T, what string, raw []byte) any {
 
 // assertMessage checks one encoded message against its golden file: topic,
 // key, the full CloudEvents value (every attribute and the whole data
-// object), and exactly the content-type header.
-func assertMessage(t *testing.T, c goldenCase, got outbox.Message) {
+// object), and exactly the content-type header. stream selects the twin
+// ("events" or "analytics") and so the golden file and the dataschema.
+func assertMessage(t *testing.T, c goldenCase, stream string, got outbox.Message) {
 	t.Helper()
-	goldenFile := goldenName(c.name)
-	if got.Topic != kafka.TopicEvents {
-		t.Errorf("%s: topic = %q, want %q", c.name, got.Topic, kafka.TopicEvents)
+	topic, goldenFile := kafka.TopicEvents, goldenName(c.name)
+	if stream == cloudevents.StreamAnalytics {
+		topic, goldenFile = kafka.TopicAnalytics, strings.TrimSuffix(goldenName(c.name), ".golden.json")+"_analytics.golden.json"
+	}
+	if got.Topic != topic {
+		t.Errorf("%s: topic = %q, want %q", c.name, got.Topic, topic)
 	}
 	if got.EventType != cloudevents.Type(c.fact.Entity, c.name) {
 		t.Errorf("%s: type = %q, want %q", c.name, got.EventType, cloudevents.Type(c.fact.Entity, c.name))
@@ -145,7 +150,7 @@ func assertMessage(t *testing.T, c goldenCase, got outbox.Message) {
 	if got.Subject != c.fact.AggregateID || string(got.Key) != c.fact.AggregateID {
 		t.Errorf("%s: subject %q key %q, want the aggregate id %q", c.name, got.Subject, got.Key, c.fact.AggregateID)
 	}
-	if got.DataSchema != cloudevents.DataSchema(cloudevents.StreamEvents, c.name, 1) {
+	if got.DataSchema != cloudevents.DataSchema(stream, c.name, 1) {
 		t.Errorf("%s: dataschema = %q", c.name, got.DataSchema)
 	}
 	wantHeaders := []outbox.Header{{Key: "content-type", Value: cloudevents.MediaType}}
@@ -168,10 +173,11 @@ func TestEncode_GoldenJSONPerType(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Encode: %v", err)
 			}
-			if len(msgs) != 1 {
-				t.Fatalf("%d messages, want 1 (the events stream; the analytics mirror ships with the projector)", len(msgs))
+			if len(msgs) != 2 {
+				t.Fatalf("%d messages, want 2 (the integration twin and the analytics twin, ADR 0006)", len(msgs))
 			}
-			assertMessage(t, c, msgs[0])
+			assertMessage(t, c, cloudevents.StreamEvents, msgs[0])
+			assertMessage(t, c, cloudevents.StreamAnalytics, msgs[1])
 		})
 	}
 }
@@ -211,6 +217,28 @@ func TestEncode_IDStableAcrossCalls(t *testing.T) {
 	}
 	if first[0].EventID != second[0].EventID || string(first[0].Value) != string(second[0].Value) {
 		t.Fatal("two encodes of one fact differ: the id/value must be a function of the persisted row")
+	}
+}
+
+// The analytics twin is byte-identical to the integration message except
+// for the dataschema stream segment: nothing else may differ (ADR 0006).
+func TestEncode_AnalyticsTwinDiffersOnlyInDataSchema(t *testing.T) {
+	for _, c := range goldenCases(t) {
+		msgs, err := kafka.Encode(c.fact)
+		if err != nil {
+			t.Fatalf("%s: Encode: %v", c.name, err)
+		}
+		want := strings.Replace(string(msgs[0].Value),
+			":exception-management:"+cloudevents.StreamEvents+":",
+			":exception-management:"+cloudevents.StreamAnalytics+":", 1)
+		if string(msgs[1].Value) != want {
+			t.Errorf("%s: analytics twin differs from the integration value outside the dataschema", c.name)
+		}
+		if msgs[1].EventID != msgs[0].EventID || msgs[1].EventType != msgs[0].EventType ||
+			msgs[1].Subject != msgs[0].Subject || string(msgs[1].Key) != string(msgs[0].Key) ||
+			!reflect.DeepEqual(msgs[1].Headers, msgs[0].Headers) {
+			t.Errorf("%s: the twins' shared columns differ", c.name)
+		}
 	}
 }
 

@@ -19,10 +19,16 @@ import (
 )
 
 // The topics this service publishes to. The outbox relay sets Message.Topic
-// per row; the Kafka writer carries no Topic (the topic-not-set-twice rule).
+// per message; the Kafka writer carries no Topic (the topic-not-set-twice
+// rule).
 const (
 	// TopicEvents is the integration topic every published type goes to.
 	TopicEvents = "warehouse.exception-management.events"
+	// TopicAnalytics is the analytics twin of the integration topic: every
+	// published type ALSO goes there, byte-identical except for the
+	// dataschema stream segment (ADR 0006). Only cmd/exceptions-projector
+	// consumes it; it is not an integration contract.
+	TopicAnalytics = "warehouse.exception-management.analytics"
 	// DLQSuffix extends a topic name into its dead-letter topic.
 	DLQSuffix = ".dlq"
 	// DeadLetterTopic is where the relay parks rows it can never publish
@@ -68,15 +74,18 @@ func decodeData(raw json.RawMessage) (any, error) {
 	return v, nil
 }
 
-// Encode maps one persisted outbox fact to its CloudEvents message on the
-// integration topic. A fact the service does not publish yields NO message
-// and NO error — the caller (the relay) dead-letters the row. A known fact
-// that cannot be built into a valid envelope (empty aggregate id, invalid
-// data JSON, SDK validation) is an error: deterministic poison, never
-// retried by re-encoding.
+// Encode maps one persisted outbox fact to its CloudEvents messages: the
+// integration twin on TopicEvents and the analytics twin on TopicAnalytics
+// (ADR 0006) — one CloudEvents id, byte-identical payloads, dataschemas
+// `urn:warehouse:exception-management:{events,analytics}:<Event>:v1`. A fact
+// the service does not publish yields NO message and NO error — the caller
+// (the relay) dead-letters the row. A known fact that cannot be built into a
+// valid envelope (empty aggregate id, invalid data JSON, SDK validation) is
+// an error: deterministic poison, never retried by re-encoding.
 //
 // The CloudEvents id is the fact's EventID — minted once at enqueue and
-// persisted, so a relay retry republishes the same id and consumers dedupe.
+// persisted, so a relay retry republishes the same id and consumers dedupe
+// (per topic: the projector's dedupe set lives in the analytical database).
 func Encode(f outbox.Fact) ([]outbox.Message, error) {
 	if !published(f.Entity, f.Event) {
 		return nil, nil
@@ -85,28 +94,48 @@ func Encode(f outbox.Fact) ([]outbox.Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode %s.%s: %w", f.Entity, f.Event, err)
 	}
+	out := make([]outbox.Message, 0, 2)
+	for _, st := range []struct {
+		stream string
+		topic  string
+	}{
+		{cloudevents.StreamEvents, TopicEvents},
+		{cloudevents.StreamAnalytics, TopicAnalytics},
+	} {
+		msg, err := message(f, data, st.stream, st.topic)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, msg)
+	}
+	return out, nil
+}
+
+// message builds the CloudEvent of one stream: the shared envelope (id, type,
+// subject, time, payload) with the stream's dataschema segment and topic.
+func message(f outbox.Fact, data any, stream, topic string) (outbox.Message, error) {
 	value, err := cloudevents.New(cloudevents.Spec{
 		ID:        f.EventID,
 		Entity:    f.Entity,
 		EventName: f.Event,
 		Subject:   f.AggregateID,
 		Time:      f.OccurredAt,
-		Stream:    cloudevents.StreamEvents,
+		Stream:    stream,
 		Version:   schemaVersion,
 		Data:      data,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("encode %s.%s: %w", f.Entity, f.Event, err)
+		return outbox.Message{}, fmt.Errorf("encode %s.%s: %w", f.Entity, f.Event, err)
 	}
 	ct := cloudevents.ContentTypeHeader()
-	return []outbox.Message{{
+	return outbox.Message{
 		EventID:    f.EventID,
-		Topic:      TopicEvents,
+		Topic:      topic,
 		EventType:  cloudevents.Type(f.Entity, f.Event),
 		Subject:    f.AggregateID,
-		DataSchema: cloudevents.DataSchema(cloudevents.StreamEvents, f.Event, schemaVersion),
+		DataSchema: cloudevents.DataSchema(stream, f.Event, schemaVersion),
 		Key:        []byte(f.AggregateID),
 		Value:      value,
 		Headers:    []outbox.Header{{Key: ct.Key, Value: string(ct.Value)}},
-	}}, nil
+	}, nil
 }
