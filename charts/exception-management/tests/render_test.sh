@@ -240,4 +240,34 @@ for component in api mcp; do
   grep -q "app.kubernetes.io/component: $component\$" <<<"$together" || fail "$component was not rendered when mcp.enabled=true"
 done
 
+# --- the optional frontend component (exceptions_mfe) -----------------------
+# Off by default: the default render is the api alone.
+if grep -q 'app.kubernetes.io/component: frontend$' <<<"$default_render"; then
+  fail "the frontend component must not render by default"
+fi
+
+# On: its own Deployment + Service, both pinned to component=frontend (so the
+# api Service never selects the frontend pods), probes on /healthz, the image
+# from frontend.image, and NO env at all -- a static nginx pod that never sees
+# the DSN, the brokers or a consumer group (the SPA reads its API origin at
+# runtime from the console's /config.json).
+fe_dep="$(render_only frontend-deployment.yaml "${base[@]}" --set frontend.enabled=true)"
+fe_svc="$(render_only frontend-service.yaml "${base[@]}" --set frontend.enabled=true)"
+grep -q 'app.kubernetes.io/component: frontend' <<<"$fe_dep" || fail "the frontend Deployment is not labelled component=frontend"
+grep -q 'app.kubernetes.io/component: frontend' <<<"$fe_svc" || fail "the frontend Service must select component=frontend"
+grep -q 'path: /healthz' <<<"$fe_dep" || fail "the frontend probes must hit /healthz"
+if grep -qE '^          env:' <<<"$fe_dep"; then
+  fail "the frontend Deployment must carry no env (static nginx; it never sees the DSN, brokers or consumer groups)"
+fi
+grep -q 'image: "warehouse/exception-management-frontend:' <<<"$fe_dep" || fail "the frontend image repository does not come from frontend.image.repository"
+fe_tag="$(render_only frontend-deployment.yaml "${base[@]}" --set frontend.enabled=true --set frontend.image.tag=local-abc123)"
+grep -q 'warehouse/exception-management-frontend:local-abc123' <<<"$fe_tag" || fail "frontend.image.tag does not reach the frontend image reference"
+no_mode "frontend Deployment" "$fe_dep"
+
+# api + mcp + frontend together: every component renders, each labelled.
+all3="$(render "${base[@]}" --set mcp.enabled=true --set frontend.enabled=true)"
+for component in api mcp frontend; do
+  grep -q "app.kubernetes.io/component: $component\$" <<<"$all3" || fail "$component was not rendered when mcp.enabled=true and frontend.enabled=true"
+done
+
 echo "PASS: exception-management chart render assertions"

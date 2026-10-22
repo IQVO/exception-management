@@ -21,3 +21,8 @@ config:
 # The optional mcp component on, together with the api.
 mcp:
   enabled: true
+
+# The optional frontend component (the exceptions_mfe Module Federation
+# remote, component=frontend) on as well: every optional component together.
+frontend:
+  enabled: true
