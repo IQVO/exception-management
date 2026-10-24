@@ -19,3 +19,4 @@ section.
 | [0003](/docs/adr/0003-local-copies-and-consumed-contracts) | local copies and the consumed contracts | Accepted (2026-10-21) |
 | [0004](/docs/adr/0004-cloudevents-envelope-and-type-catalogue) | CloudEvents envelope and type catalogue | Accepted (2026-10-21) |
 | [0005](/docs/adr/0005-outbox-relay-attempt-cap-and-dlq) | outbox relay — delete-on-publish, attempt cap, dead-letter topic | Accepted (2026-10-21) |
+| [0006](/docs/adr/0006-carton-discrepancy-consumer-and-routing) | carton-discrepancy consumer and routing | Accepted (2026-10-24) |

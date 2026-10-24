@@ -17,6 +17,7 @@ config:
   orderCorrelationConsumerGroup: "exception-management-order-correlation"
   inventoryExceptionsConsumerGroup: "exception-management-inventory"
   returnsExceptionsConsumerGroup: "exception-management-returns"
+  cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"
 
 # The optional mcp component on, together with the api (and its Kong route:
 # mcp.route is off by default in the chart's values).

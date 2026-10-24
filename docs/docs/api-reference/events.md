@@ -67,6 +67,7 @@ the FULL type; every other type on those topics is ignored (commit past).
 | `com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.returns-processing.returnreceipt.UnexpectedReturnReceived` | `warehouse.returns-processing.events` | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` |
+| `com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | `CARTON_DISCREPANCY_CONSUMER_GROUP` |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | `ORDER_CORRELATION_CONSUMER_GROUP` — **correlation only, never a case source** |
 
 **Roadmap, not consumed:** workforce-management `PathUnderstaffed` and

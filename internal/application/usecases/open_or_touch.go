@@ -23,6 +23,10 @@ type Fact struct {
 	SiteID        string
 	SourceEventID string
 	Payload       []byte
+	// PolicyType, when set, is the source type whose policy governs the
+	// case (carton-discrepancy routing: one source type, several policies).
+	// Empty = SourceType.
+	PolicyType string
 }
 
 // OpenOrTouchException is the consumer-driven entry point: the dedup decision
@@ -45,10 +49,10 @@ func (uc *OpenOrTouchException) Execute(ctx context.Context, fact Fact) (*except
 	if err != nil {
 		return nil, err
 	}
-	policy, err := uc.Policies.Get(ctx, fact.SourceType)
+	policy, err := uc.Policies.Get(ctx, fact.policyType())
 	if err != nil {
 		if errors.Is(err, ports.ErrNotFound) {
-			return nil, fmt.Errorf("%w: %s", ErrPolicyUndeclared, fact.SourceType)
+			return nil, fmt.Errorf("%w: %s", ErrPolicyUndeclared, fact.policyType())
 		}
 		return nil, err
 	}
@@ -89,6 +93,14 @@ func (uc *OpenOrTouchException) Execute(ctx context.Context, fact Fact) (*except
 		return nil, err
 	}
 	return c, nil
+}
+
+// policyType is the source type the policy is looked up under.
+func (f Fact) policyType() string {
+	if f.PolicyType != "" {
+		return f.PolicyType
+	}
+	return f.SourceType
 }
 
 // atomically runs fn inside uow when one is wired, unwrapped otherwise

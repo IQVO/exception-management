@@ -124,6 +124,7 @@ config:
   orderCorrelationConsumerGroup: "exception-management-order-correlation"       # ORDER_CORRELATION_CONSUMER_GROUP (warehouse.order-management.events, auto-resolve correlation)
   inventoryExceptionsConsumerGroup: "exception-management-inventory"            # INVENTORY_EXCEPTIONS_CONSUMER_GROUP (warehouse.inventory.events)
   returnsExceptionsConsumerGroup: "exception-management-returns"                # RETURNS_EXCEPTIONS_CONSUMER_GROUP (warehouse.returns-processing.events)
+  cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"      # CARTON_DISCREPANCY_CONSUMER_GROUP (warehouse.inbound-receiving.events)
 
 # MANDATORY: the chart refuses to render unless database.url or
 # database.existingSecret is set (templates/_helpers.tpl:
@@ -147,7 +148,8 @@ database:
 # writer auto-creates it and its .dlq on first write, the fleet convention);
 # consumed: warehouse.fulfillment.events, warehouse.work-planning.events,
 # warehouse.network-fulfillment.events, warehouse.order-management.events,
-# warehouse.inventory.events, warehouse.returns-processing.events. The
+# warehouse.inventory.events, warehouse.returns-processing.events,
+# warehouse.inbound-receiving.events. The
 # service never creates topics through an admin API, and /readyz does not
 # wait for any topic: a consumed topic that does not exist yet (its producer
 # has not written) shows as consumer retry logs, not as unreadiness.

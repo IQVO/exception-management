@@ -25,13 +25,14 @@ info:
     the same `id`). Kafka key = case id (source type for the policy event), so
     one case's history stays ordered on one partition.
 
-    **Consumed (ADR 0003).** Exception facts from six sibling contexts:
+    **Consumed (ADR 0003, 0006).** Exception facts from seven sibling contexts:
     fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
     `WeightDiscrepancyDetected`), wes-work-planning
     (`BacklogThresholdBreached`), network-fulfillment
     (`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),
     order-management (`OrderRepromised`, correlation for auto-resolve only),
-    returns-processing (`UnexpectedReturnReceived`) and inventory-storage
+    returns-processing (`UnexpectedReturnReceived`), inbound-receiving
+    (`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006) and inventory-storage
     (`DiscrepancyDetected`, `ItemUnlocated`). Each consumed message opens or
     touches exactly one open case per dedup key (source type, source subject,
     site); the source payload is frozen on the case, never re-fetched. The
@@ -244,6 +245,27 @@ channels:
         - name: consumed
       message:
         $ref: "#/components/messages/UnexpectedReturnReceived"
+
+  warehouse.inbound-receiving.events:
+    description: |
+      inbound-receiving's integration topic. This service consumes ONLY
+      `CartonDiscrepancyRaised` under a stable consumer group read from env
+      `CARTON_DISCREPANCY_CONSUMER_GROUP` (ADR 0006). Every other type is
+      ignored.
+    publish:
+      operationId: consumeInboundReceivingEvents
+      summary: Consume carton discrepancies as routed cases.
+      description: |
+        One case per (receipt_id, sscc or "-", kind). Missing, Duplicate,
+        Unexpected, CaseQtyMismatch, MixedCaseDeclaredAsCasePack,
+        MixedCartonContentMismatch, UnknownGtin and any unknown kind route to
+        the problem-solve policy; UnlabelledCarton and CartonOverLimit to the
+        receiving-lead policy (informational). The CloudEvents `id` claim and
+        the effect commit in one transaction.
+      tags:
+        - name: consumed
+      message:
+        $ref: "#/components/messages/CartonDiscrepancyRaised"
 
   warehouse.inventory.events:
     description: |
@@ -792,6 +814,42 @@ components:
               site_id: "site-1"
               received_at: "2026-10-21T10:12:00Z"
 
+    CartonDiscrepancyRaised:
+      name: CartonDiscrepancyRaised
+      title: CartonDiscrepancyRaised (consumed, inbound-receiving)
+      summary: A carton did not match its ASN or failed a receiving check.
+      description: |
+        `type` =
+        `com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised`,
+        source `/warehouse/inbound-receiving`, subject and Kafka key = the
+        receipt id. `kind` is an open string (UnexpectedCarton, MissingCarton,
+        DuplicateSscc, UnknownGtin, CaseQtyMismatch, MixedCaseDeclaredAsCasePack,
+        UnlabelledCarton, CartonOverLimit, MixedCartonContentMismatch, ...).
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/CartonDiscrepancyRaisedEvent"
+      examples:
+        - name: caseQtyMismatch
+          summary: A case declared 12 units but 10 were counted.
+          payload:
+            specversion: "1.0"
+            id: "5b2f0c1e-7a44-4b58-8f5d-2f6c1a9d3e10"
+            source: "/warehouse/inbound-receiving"
+            type: "com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised"
+            subject: "rcpt-77"
+            time: "2026-10-24T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inbound-receiving:events:CartonDiscrepancyRaised:v1"
+            data:
+              receipt_id: "rcpt-77"
+              sscc: "340123450000000013"
+              kind: "CaseQtyMismatch"
+              expected: "12"
+              actual: "10"
+              at: "2026-10-24T09:00:00Z"
+
     DiscrepancyDetected:
       name: DiscrepancyDetected
       title: DiscrepancyDetected (consumed, inventory-storage)
@@ -1322,6 +1380,22 @@ components:
                 quantity: { type: integer, minimum: 1 }
                 site_id: { type: string }
                 received_at: { type: string, format: date-time }
+
+    CartonDiscrepancyRaisedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [receipt_id, kind, at]
+              properties:
+                receipt_id: { type: string }
+                sscc: { type: string, description: The carton's SSCC-18; absent when the discrepancy is not about one carton. }
+                kind: { type: string, description: Open string; unknown kinds route to problem-solve. }
+                expected: { type: string }
+                actual: { type: string }
+                at: { type: string, format: date-time }
 
     DiscrepancyDetectedEvent:
       allOf:

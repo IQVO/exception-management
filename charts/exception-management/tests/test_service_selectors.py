@@ -54,6 +54,7 @@ API_ENV = (
     "FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP",
     "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
     "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
+    "CARTON_DISCREPANCY_CONSUMER_GROUP",
     "OUTBOX_RELAY_INTERVAL", "OUTBOX_MAX_ATTEMPTS", "SLA_SWEEP_INTERVAL", "SHUTDOWN_DRAIN_DELAY",
 )
 # Env that must stay off with default values so the binary's defaults apply.
@@ -176,6 +177,7 @@ def check_mcp(dep: dict | None, failures: list[str]) -> None:
         "FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP",
         "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
         "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
+    "CARTON_DISCREPANCY_CONSUMER_GROUP",
     } & env
     stray.update(mode_names(env_names(dep)))
     if stray:
@@ -204,6 +206,7 @@ def check_env(api: dict, failures: list[str]) -> None:
         ("ORDER_CORRELATION_CONSUMER_GROUP", "exception-management-order-correlation"),
         ("INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "exception-management-inventory"),
         ("RETURNS_EXCEPTIONS_CONSUMER_GROUP", "exception-management-returns"),
+        ("CARTON_DISCREPANCY_CONSUMER_GROUP", "exception-management-carton-discrepancy"),
         ("OUTBOX_RELAY_INTERVAL", "500ms"),
         ("SLA_SWEEP_INTERVAL", "45s"),
         ("SHUTDOWN_DRAIN_DELAY", "5s"),
@@ -240,6 +243,7 @@ def check_refusals(failures: list[str]) -> None:
         ("an empty order-correlation group", BASE + ["--set", "config.orderCorrelationConsumerGroup="], "config.orderCorrelationConsumerGroup"),
         ("an empty inventory group", BASE + ["--set", "config.inventoryExceptionsConsumerGroup="], "config.inventoryExceptionsConsumerGroup"),
         ("an empty returns group", BASE + ["--set", "config.returnsExceptionsConsumerGroup="], "config.returnsExceptionsConsumerGroup"),
+        ("an empty carton-discrepancy group", BASE + ["--set", "config.cartonDiscrepancyConsumerGroup="], "config.cartonDiscrepancyConsumerGroup"),
         ("a *_MODE variable through extraEnv",
          BASE + ["--set", "extraEnv[0].name=EXCEPTIONS_MODE", "--set", "extraEnv[0].value=permissive"], "EXCEPTIONS_MODE"),
         ("a *_MODE variable through mcp.extraEnv",

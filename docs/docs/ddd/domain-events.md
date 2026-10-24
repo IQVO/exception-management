@@ -82,6 +82,7 @@ skipped (WARN, commit past).
 | `wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk` | `warehouse.network-fulfillment.events` | networkRef | Re-fires while the condition holds; siteId feeds the dedup key |
 | `wes.network-fulfillment.networkorder.OrphanedHoldCancelled` | `warehouse.network-fulfillment.events` | networkRef | Same |
 | `wms.returns-processing.returnreceipt.UnexpectedReturnReceived` | `warehouse.returns-processing.events` | receipt id (+ line) | One case per receipt line; site_id feeds the dedup key |
+| `wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | receipt id + sscc or `-` + kind | One case per (receipt, sscc, kind); UnlabelledCarton/CartonOverLimit route to receiving-lead, every other kind to problem-solve (ADR 0006) |
 | `wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | bin id | Promoted by the producer (PR #239, merged 2026-10-21) |
 | `wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | stock unit id | Same promotion |
 | `wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | — | **Correlation only, never a case source**: the correlated fact of the auto-resolve rule |

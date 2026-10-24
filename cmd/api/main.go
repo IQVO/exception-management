@@ -24,6 +24,7 @@
 //	ORDER_CORRELATION_CONSUMER_GROUP
 //	INVENTORY_EXCEPTIONS_CONSUMER_GROUP
 //	RETURNS_EXCEPTIONS_CONSUMER_GROUP
+//	CARTON_DISCREPANCY_CONSUMER_GROUP
 //	                          REQUIRED. Each consumer's group id
 //	                          (.claude/rules/integration-events.md)
 //	HTTP_ADDR                 listen address (default :8080)
