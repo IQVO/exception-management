@@ -43,8 +43,8 @@ func TestMigrationsApplyAndAreIdempotent(t *testing.T) {
 		}
 	}
 	var version int
-	if err := conn.QueryRow(ctx, `SELECT version FROM schema_migrations`).Scan(&version); err != nil || version != 2 {
-		t.Fatalf("schema_migrations version = %d %v, want 2", version, err)
+	if err := conn.QueryRow(ctx, `SELECT version FROM schema_migrations`).Scan(&version); err != nil || version != 3 {
+		t.Fatalf("schema_migrations version = %d %v, want 3", version, err)
 	}
 }
 

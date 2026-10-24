@@ -3,6 +3,7 @@
 package postgres_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres"
@@ -22,7 +23,16 @@ func TestCaseRepoContract(t *testing.T) {
 
 func TestPolicyRepoContract(t *testing.T) {
 	repocontract.PolicyRepo(t, func(t *testing.T) ports.ExceptionPolicyRepo {
-		return postgres.NewPolicyRepo(pgtest.NewPool(t))
+		pool := pgtest.NewPool(t)
+		// Migration 0003 seeds the two CartonDiscrepancyRaised routes into
+		// every database cloned from the migrated template. The contract
+		// cases assume an empty policy table (they must hold for the
+		// in-memory doubles too, which start empty), so the seed rows are
+		// cleared for the contract run only.
+		if _, err := pool.Exec(context.Background(), `DELETE FROM exception_policies`); err != nil {
+			t.Fatalf("clearing the seeded policies: %v", err)
+		}
+		return postgres.NewPolicyRepo(pool)
 	})
 }
 
