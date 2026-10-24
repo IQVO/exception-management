@@ -143,4 +143,5 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	registerCaseStateSteps(sc, w)
 	registerOutcomeSteps(sc, w)
 	registerEventAuditSteps(sc, w)
+	registerCartonSteps(sc, w)
 }
