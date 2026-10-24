@@ -38,7 +38,7 @@ type inboundRuntime struct {
 	sweepDone chan struct{}
 }
 
-// buildConsumers wires the use cases over the Postgres adapters and the six
+// buildConsumers wires the use cases over the Postgres adapters and the seven
 // consumers over the pinned group ids (each id from its own environment
 // variable, never a literal — .claude/rules/integration-events.md).
 func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, clock ports.Clock, logger *slog.Logger) []*kafkain.Consumer {
@@ -54,6 +54,7 @@ func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, cl
 		},
 		UnitOfWork: uow,
 	}
+	openCarton := &usecases.OpenCartonDiscrepancy{Consume: consume}
 	correlate := &usecases.ConsumeCorrelation{
 		Processed: processed,
 		AutoResolve: &usecases.AutoResolveOnCorrelation{
@@ -68,11 +69,12 @@ func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, cl
 		kafkain.NewNetworkFulfillmentExceptionsConsumer(cfg.brokers, g["NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewInventoryExceptionsConsumer(cfg.brokers, g["INVENTORY_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewReturnsExceptionsConsumer(cfg.brokers, g["RETURNS_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
+		kafkain.NewCartonDiscrepancyConsumer(cfg.brokers, g["CARTON_DISCREPANCY_CONSUMER_GROUP"], openCarton, logger),
 		kafkain.NewOrderCorrelationConsumer(cfg.brokers, g["ORDER_CORRELATION_CONSUMER_GROUP"], correlate, logger),
 	}
 }
 
-// startInbound boots the six consumers and the SLA sweep ticker. A consumer
+// startInbound boots the seven consumers and the SLA sweep ticker. A consumer
 // that returns anything other than ctx.Cancellation is a DEATH: it lands on
 // errCh, run returns the error and the process exits non-zero — the pod
 // restarts (the fleet rule; a silently dead consumer is a silently missed

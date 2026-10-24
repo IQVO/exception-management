@@ -20,6 +20,7 @@ The six fact consumers are always ON (no *_MODE exists in this service):
   group {{ .Values.config.orderCorrelationConsumerGroup }}      <- warehouse.order-management.events (auto-resolve correlation)
   group {{ .Values.config.inventoryExceptionsConsumerGroup }}         <- warehouse.inventory.events
   group {{ .Values.config.returnsExceptionsConsumerGroup }}           <- warehouse.returns-processing.events
+  group {{ .Values.config.cartonDiscrepancyConsumerGroup }}           <- warehouse.inbound-receiving.events
 
 /readyz answers 503 until Postgres answers and a Kafka broker answers a
 metadata request. Topics are not checked: the relay's writer auto-creates the

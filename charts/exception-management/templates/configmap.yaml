@@ -23,6 +23,7 @@ data:
   ORDER_CORRELATION_CONSUMER_GROUP: {{ required "exception-management requires config.orderCorrelationConsumerGroup to be set (ORDER_CORRELATION_CONSUMER_GROUP)" .Values.config.orderCorrelationConsumerGroup | quote }}
   INVENTORY_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.inventoryExceptionsConsumerGroup to be set (INVENTORY_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.inventoryExceptionsConsumerGroup | quote }}
   RETURNS_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.returnsExceptionsConsumerGroup to be set (RETURNS_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.returnsExceptionsConsumerGroup | quote }}
+  CARTON_DISCREPANCY_CONSUMER_GROUP: {{ required "exception-management requires config.cartonDiscrepancyConsumerGroup to be set (CARTON_DISCREPANCY_CONSUMER_GROUP)" .Values.config.cartonDiscrepancyConsumerGroup | quote }}
   {{- with .Values.config.outboxRelayInterval }}
   OUTBOX_RELAY_INTERVAL: {{ . | quote }}
   {{- end }}

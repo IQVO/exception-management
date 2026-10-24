@@ -70,7 +70,7 @@ type Reader interface {
 // the first FetchMessage inside the consumer's own goroutine, so a missing
 // topic or an unreachable broker never blocks process startup.
 func readerConfig(brokers []string, topic, groupID string) kafkago.ReaderConfig {
-	return kafkago.ReaderConfig{Brokers: brokers, Topic: topic, GroupID: groupID}
+	return kafkago.ReaderConfig{Brokers: brokers, Topic: topic, GroupID: groupID, MaxWait: 500 * time.Millisecond}
 }
 
 func defaultLogger(logger *slog.Logger) *slog.Logger {
