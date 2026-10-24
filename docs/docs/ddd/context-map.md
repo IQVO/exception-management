@@ -49,6 +49,7 @@ live REST or MCP call to a sibling at request time, ever.
 | network-fulfillment | `warehouse.network-fulfillment.events` | `networkorder.AcknowledgementDeadlineAtRisk`, `networkorder.OrphanedHoldCancelled` | `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` | Live (verified) |
 | order-management | `warehouse.order-management.events` | `order.OrderRepromised` — correlation only, never a case source | `ORDER_CORRELATION_CONSUMER_GROUP` | Live (verified) |
 | returns-processing | `warehouse.returns-processing.events` | `returnreceipt.UnexpectedReturnReceived` | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` | Live: the producer shipped (its develop publishes the type) |
+| inbound-receiving | `warehouse.inbound-receiving.events` | `receipt.CartonDiscrepancyRaised` | `CARTON_DISCREPANCY_CONSUMER_GROUP` | Live: routed by kind (ADR 0006) |
 | inventory-storage | `warehouse.inventory.events` | `bin.DiscrepancyDetected`, `stock.ItemUnlocated` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | Live: promoted by the producer's PR #239 (merged 2026-10-21) |
 
 ADR 0003/0004 still describe the inventory and package types as "pending
