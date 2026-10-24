@@ -292,6 +292,7 @@ channels:
 components:
   messages:
     ExceptionOpened:
+      x-no-consumer-reason: "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1"
       name: ExceptionOpened
       title: Exception opened
       summary: A source fact created a case (first occurrence of the dedup key).
@@ -336,6 +337,7 @@ components:
                 cpt: "2026-09-30T14:55:00Z"
 
     ExceptionTriaged:
+      x-no-consumer-reason: "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1"
       name: ExceptionTriaged
       title: Exception triaged
       summary: Severity and queue were set (policy default or operator).
@@ -367,6 +369,7 @@ components:
               at: "2026-10-21T09:05:00Z"
 
     ExceptionAssigned:
+      x-no-consumer-reason: "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1"
       name: ExceptionAssigned
       title: Exception assigned
       summary: An owner took the case.
@@ -398,6 +401,7 @@ components:
               at: "2026-10-21T09:10:00Z"
 
     ExceptionEscalated:
+      x-no-consumer-reason: "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1"
       name: ExceptionEscalated
       title: Exception escalated
       summary: The SLA clock breached; the ESCALATED flag was set (work continues).
@@ -429,6 +433,7 @@ components:
               at: "2026-10-21T09:30:06Z"
 
     ExceptionResolved:
+      x-no-consumer-reason: "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1"
       name: ExceptionResolved
       title: Exception resolved
       summary: A resolution code and root cause were recorded; the case is terminal.
@@ -463,6 +468,7 @@ components:
               at: "2026-10-21T09:25:00Z"
 
     ExceptionAutoResolved:
+      x-no-consumer-reason: "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1"
       name: ExceptionAutoResolved
       title: Exception auto-resolved
       summary: A declarative policy rule closed the case on a correlated fact.
@@ -498,6 +504,7 @@ components:
               at: "2026-10-21T09:20:00Z"
 
     ExceptionPolicyDeclared:
+      x-no-consumer-reason: "policy declaration fact (append-only versions); no event consumer in v1"
       name: ExceptionPolicyDeclared
       title: Exception policy declared
       summary: A new version of the handling policy of a source type.
