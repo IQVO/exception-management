@@ -81,6 +81,53 @@ erDiagram
 (The `idempotency_keys` column list follows migration 0002 and the
 middleware's store contract in `internal/adapters/inbound/http/idempotency.go`.)
 
+## Analytical database
+
+The exception-analytics read model is a separate database
+(`exception_management_analytics`, `ANALYTICS_DATABASE_URL`), written only by
+`cmd/exceptions-projector` from `warehouse.exception-management.analytics` and
+read by `cmd/exceptions-reports`. Facts, not aggregates: it can be dropped and
+rebuilt by replaying the topic under a new consumer group. No foreign keys.
+Source: `analytics/migrations/0001_exception_analytics.up.sql`.
+
+```mermaid
+erDiagram
+    analytics_processed_events {
+        text event_id PK "every applied CloudEvents id, claimed with its effect"
+        text event_type
+        timestamptz occurred_at "indexed; max() is the projection's freshness"
+        timestamptz applied_at
+    }
+    exception_case_facts {
+        text case_id PK
+        text source_type "nullable until the OPENED event is seen"
+        text source_subject
+        text site_id
+        text severity
+        text queue
+        timestamptz opened_at "nullable"
+        timestamptz sla_due_at "nullable; ExceptionEscalated refreshes it"
+        timestamptz triaged_at "nullable; latest wins"
+        timestamptz assigned_at "nullable"
+        text assignee "nullable; latest wins"
+        timestamptz escalated_at "nullable"
+        timestamptz resolved_at "nullable"
+        timestamptz auto_resolved_at "nullable"
+        text resolution_code "nullable"
+        text root_cause "nullable"
+    }
+    exception_policy_facts {
+        text source_type PK
+        bigint version PK
+        text severity
+        text queue
+        bigint sla_minutes
+        text auto_resolve_on_type "nullable"
+        bigint auto_resolve_within_minutes "nullable"
+        timestamptz declared_at "earliest time seen for the version"
+    }
+```
+
 ## The constraints that matter
 
 | Constraint | Enforces |
