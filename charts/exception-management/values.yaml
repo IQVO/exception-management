@@ -239,6 +239,51 @@ mcp:
       cpu: 100m
       memory: 128Mi
 
+# --- A2A agent (cmd/a2a, ADR 0007) ---
+# A READ-ONLY Agent2Agent agent over JSON-RPC (sla_status, find_exceptions) on
+# the same Postgres as the api: the third driving adapter over the SAME read
+# use cases as REST and MCP. A2A carries delegation of a goal only; facts still
+# travel as CloudEvents on Kafka. A separate workload (component=a2a, Service
+# <fullname>-a2a:8093); like cmd/mcp it never writes, never dials Kafka and has
+# no auth (fleet rule: the ClusterIP boundary is the access control). DISABLED
+# by default: the default render is unchanged.
+a2a:
+  enabled: false
+  replicaCount: 1
+  # A2A_ADDR the binary listens on; keep in sync with service.targetPort.
+  # (8090 is mcp, 8091 the projector admin and 8092 the reports API, so 8093.)
+  httpAddr: ":8093"
+  # Absolute URL advertised on the Agent Card. Empty defaults to this
+  # release's in-cluster Service DNS (http://<release>-a2a.<ns>.svc.cluster.local:8093/);
+  # warehouse-infra can override it with the Kong path when the agent must be
+  # reachable off-cluster.
+  agentUrl: ""
+  service:
+    type: ClusterIP
+    port: 8093
+    targetPort: 8093
+  # Kong exposure of the A2A agent (a2a-route.yaml): host path
+  # /api/a2a/exception-management rewritten to / (JSON-RPC root; the
+  # well-known agent card stays reachable under the same prefix). Off by
+  # default; warehouse-infra turns it on with the real parentRefs.
+  route:
+    enabled: false
+    path: "/api/a2a/exception-management"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  # Extra env vars appended to the a2a container as a raw list. A *_MODE
+  # name is refused at render time (templates/_helpers.tpl).
+  extraEnv: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 # --- frontend (Module Federation REMOTE `exceptions_mfe`) ---
 # The operator SPA remote, built from web/ and served by its own
 # nginx-unprivileged pod (component=frontend). In the kind cluster it is

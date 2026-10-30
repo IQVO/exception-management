@@ -90,6 +90,16 @@ selects it (tests/test_service_selectors.py).
 {{- end }}
 
 {{/*
+Fully qualified name of the optional a2a component (the read-only Agent2Agent
+agent, cmd/a2a, ADR 0007). It is its own workload with its own
+app.kubernetes.io/component label; the api Service never selects it
+(tests/test_service_selectors.py).
+*/}}
+{{- define "exception-management.a2aFullname" -}}
+{{- include "exception-management.fullname" . }}-a2a
+{{- end }}
+
+{{/*
 Fully qualified name of the optional frontend component (the exceptions_mfe
 Module Federation remote served by nginx). It is its own workload with its
 own app.kubernetes.io/component label; the api Service never selects it
@@ -203,6 +213,11 @@ on the api, not on the mcp component and not on the analytics components.
 {{- fail (printf "mcp.extraEnv sets %s — the *_MODE variables do not exist: this service has no modes, real Postgres and real Kafka are the only runtime." .name) -}}
 {{- end -}}
 {{- end -}}
+{{- range .Values.a2a.extraEnv -}}
+{{- if hasSuffix "_MODE" (toString .name) -}}
+{{- fail (printf "a2a.extraEnv sets %s — the *_MODE variables do not exist: this service has no modes, real Postgres and real Kafka are the only runtime." .name) -}}
+{{- end -}}
+{{- end -}}
 {{- range .Values.analytics.projector.extraEnv -}}
 {{- if hasSuffix "_MODE" (toString .name) -}}
 {{- fail (printf "analytics.projector.extraEnv sets %s — the *_MODE variables do not exist: this service has no modes, real Postgres and real Kafka are the only runtime." .name) -}}
@@ -218,7 +233,7 @@ on the api, not on the mcp component and not on the analytics components.
 {{/*
 Comma-joined names of this chart's enabled KongPlugins, for the
 konghq.com/plugins annotation on the HTTPRoutes this chart renders
-(httproute.yaml, mcp-route.yaml). Empty string (annotation omitted) when
+(httproute.yaml, mcp-route.yaml, a2a-route.yaml). Empty string (annotation omitted) when
 none are enabled.
 */}}
 {{- define "exception-management.kongPluginNames" -}}

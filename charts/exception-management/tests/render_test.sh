@@ -196,6 +196,8 @@ expect_refusal "a *_MODE variable through analytics.projector.extraEnv" "_MODE" 
 expect_refusal "analytics on but no DSN source" "analytics.url nor analytics.existingSecret" "${base[@]}" --set analytics.enabled=true
 expect_refusal "analytics on but an empty consumer group" "analytics.consumerGroup" "${base[@]}" --set analytics.enabled=true --set analytics.url=postgres://u@h/a --set analytics.consumerGroup=
 expect_refusal "mcp on but no database source" "database.url or database.existingSecret" --set kafka.brokers=k:9092 --set mcp.enabled=true
+expect_refusal "a *_MODE variable through a2a.extraEnv" "_MODE" "${base[@]}" --set a2a.enabled=true --set 'a2a.extraEnv[0].name=A2A_MODE' --set 'a2a.extraEnv[0].value=stdio'
+expect_refusal "a2a on but no database source" "database.url or database.existingSecret" --set kafka.brokers=k:9092 --set a2a.enabled=true
 
 # --- the optional mcp component ---------------------------------------------------
 # Off by default: the default render is the api alone.
@@ -245,6 +247,55 @@ grep -q "name: MIGRATIONS_DATABASE_URL$" <<<"$mcp_full" || fail "the mcp Deploym
 together="$(render "${base[@]}" --set mcp.enabled=true)"
 for component in api mcp; do
   grep -q "app.kubernetes.io/component: $component\$" <<<"$together" || fail "$component was not rendered when mcp.enabled=true"
+done
+
+# --- the optional a2a component (ADR 0007) -----------------------------------
+# Off by default: the default render is the api alone.
+if grep -q 'app.kubernetes.io/component: a2a$' <<<"$default_render"; then
+  fail "the a2a component must not render by default"
+fi
+if render_only a2a-deployment.yaml "${base[@]}" 2>&1 | grep -q 'kind: Deployment'; then
+  fail "the a2a Deployment rendered with default values"
+fi
+
+# The READ-ONLY A2A agent: Postgres only, its own Service, never Kafka (it is
+# cmd/mcp's twin: no outbox, no publisher, no relay).
+a2a_dep="$(render_only a2a-deployment.yaml "${base[@]}" --set a2a.enabled=true)"
+a2a_svc="$(render_only a2a-service.yaml "${base[@]}" --set a2a.enabled=true)"
+grep -q 'app.kubernetes.io/component: a2a' <<<"$a2a_dep" || fail "the a2a Deployment is not labelled component=a2a"
+grep -q 'command: \["/app/a2a"\]' <<<"$a2a_dep" || fail "the a2a Deployment must run /app/a2a"
+grep -q 'app.kubernetes.io/component: a2a' <<<"$a2a_svc" || fail "the a2a Service must select component=a2a"
+grep -A4 'name: DATABASE_URL$' <<<"$a2a_dep" | grep -q 'secretKeyRef:' || fail "the a2a DATABASE_URL must come from a Secret"
+grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$a2a_dep" | grep -q 'optional: true' || fail "the a2a MIGRATIONS_DATABASE_URL must be an optional secretKeyRef"
+if grep -Eq 'name: (KAFKA_BROKERS|EVENT_PUBLISHER|[A-Z]+_CONSUMER_GROUP|OUTBOX_[A-Z_]+|SLA_SWEEP_INTERVAL)$' <<<"$a2a_dep"; then
+  fail "the a2a Deployment must not get Kafka/publisher/relay/sweep/consumer env (read-only, never dials Kafka)"
+fi
+if grep -q 'configMapRef:' <<<"$a2a_dep"; then fail "the a2a Deployment must not mount the api ConfigMap"; fi
+no_mode "a2a Deployment" "$a2a_dep"
+[[ "$(env_value "$a2a_dep" A2A_ADDR)" == ":8093" ]] || fail "the a2a agent must listen on :8093 (8090 is mcp, 8091 the projector admin, 8092 the reports API)"
+[[ "$(env_value "$(render_only a2a-deployment.yaml "${base[@]}" --set a2a.enabled=true --set a2a.httpAddr=:9393)" A2A_ADDR)" == ":9393" ]] || fail "a2a.httpAddr does not reach A2A_ADDR"
+# The Agent Card must advertise a dialable absolute URL: it defaults to the
+# release's in-cluster Service DNS (namespace-derived, so pattern-match) and
+# stays overridable.
+a2a_url="$(env_value "$a2a_dep" A2A_AGENT_URL || true)" # a missing var must reach the fail message below, not abort under set -e
+[[ "$a2a_url" =~ ^http://[a-z0-9.-]+-a2a\.[a-z0-9-]+\.svc\.cluster\.local:8093/$ ]] || fail "A2A_AGENT_URL default is not the in-cluster Service DNS: $a2a_url"
+a2a_override="$(render_only a2a-deployment.yaml "${base[@]}" --set a2a.enabled=true --set a2a.agentUrl=http://gw.example/api/a2a/exception-management/)"
+[[ "$(env_value "$a2a_override" A2A_AGENT_URL || true)" == "http://gw.example/api/a2a/exception-management/" ]] || fail "a2a.agentUrl does not override A2A_AGENT_URL"
+# Every variable cmd/a2a's boot errors name as REQUIRED is rendered, derived
+# from the Go source so a new mandatory variable fails until the chart has it.
+a2a_vars="$(grep -ho --exclude='*_test.go' '[A-Z][A-Z0-9_]\{2,\} is required' "$repo_dir"/cmd/a2a/*.go | sed -E 's/ is required//' | sort -u || true)"
+[[ -n "$a2a_vars" ]] || fail "found no mandatory variables for cmd/a2a; the scan is looking in the wrong place"
+for var in $a2a_vars; do
+  grep -q "name: $var\$" <<<"$a2a_dep" || fail "the a2a Deployment does not render $var, which cmd/a2a requires"
+done
+a2a_full="$(render_only a2a-deployment.yaml "${everything[@]}")"
+assert_renders_env "a2a" "$a2a_full" a2a
+grep -q "name: MIGRATIONS_DATABASE_URL$" <<<"$a2a_full" || fail "the a2a Deployment does not render MIGRATIONS_DATABASE_URL (migrations step)"
+
+# api + mcp + a2a together: every component renders, each labelled.
+with_a2a="$(render "${base[@]}" --set mcp.enabled=true --set a2a.enabled=true)"
+for component in api mcp a2a; do
+  grep -q "app.kubernetes.io/component: $component\$" <<<"$with_a2a" || fail "$component was not rendered when mcp.enabled=true and a2a.enabled=true"
 done
 
 # --- the optional frontend component (exceptions_mfe) -----------------------
@@ -356,6 +407,17 @@ mcp_route="$(render_only mcp-route.yaml "${everything[@]}")"
 grep -q 'value: /api/mcp/exception-management' <<<"$mcp_route" || fail "the mcp HTTPRoute does not match /api/mcp/exception-management"
 grep -q 'replacePrefixMatch: /mcp' <<<"$mcp_route" || fail "the mcp HTTPRoute does not rewrite to /mcp"
 grep -q "name: $release-mcp" <<<"$mcp_route" || fail "the mcp HTTPRoute does not target the -mcp Service"
+# The a2a route stays off until a2a.route.enabled, even with a2a on; with it on
+# it matches /api/a2a/exception-management, rewrites to / (so the well-known
+# agent card stays reachable under the same prefix) and targets the -a2a Service.
+if render_only a2a-route.yaml "${base[@]}" --set a2a.enabled=true 2>&1 | grep -q 'kind: HTTPRoute'; then
+  fail "the a2a route must stay off until a2a.route.enabled"
+fi
+a2a_route="$(render_only a2a-route.yaml "${everything[@]}")"
+grep -q 'value: /api/a2a/exception-management' <<<"$a2a_route" || fail "the a2a HTTPRoute does not match /api/a2a/exception-management"
+grep -q 'replacePrefixMatch: /$' <<<"$a2a_route" || fail "the a2a HTTPRoute does not rewrite to /"
+grep -q "name: $release-a2a" <<<"$a2a_route" || fail "the a2a HTTPRoute does not target the -a2a Service"
+grep -q 'konghq.com/plugins:' <<<"$a2a_route" || fail "the a2a HTTPRoute has no konghq.com/plugins annotation"
 plugins="$(render_only kong-plugins.yaml "${everything[@]}")"
 for plugin in cors prometheus opentelemetry; do
   grep -q "plugin: $plugin" <<<"$plugins" || fail "the $plugin KongPlugin does not render when enabled"

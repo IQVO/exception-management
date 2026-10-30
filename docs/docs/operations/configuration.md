@@ -52,6 +52,19 @@ topic from the start.
 The MCP binary reads **no** Kafka variable: it never dials Kafka, never starts the relay, the
 consumers or the sweeper.
 
+## `cmd/a2a`
+
+| Variable | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | yes | — | same Postgres as `cmd/api` |
+| `MIGRATIONS_DATABASE_URL` | no | `DATABASE_URL` | direct (non-pooled) DSN used only for the boot migrations, as for `cmd/mcp` |
+| `A2A_AGENT_URL` | yes | — | absolute http(s) URL of this agent's JSON-RPC endpoint, advertised on the Agent Card (the chart defaults it to the in-cluster Service DNS `http://<release>-a2a.<ns>.svc.cluster.local:8093/`); the binary refuses to boot without it |
+| `A2A_ADDR` | no | `:8093` | listen address (JSON-RPC at `/` and `/a2a`, the card at `/.well-known/agent-card.json`, open `GET /healthz`) |
+| `LOG_LEVEL` | no | `info` | as above |
+
+Like the MCP binary, the A2A agent is read-only and reads **no** Kafka variable: it never dials Kafka,
+never starts the relay, the consumers or the sweeper ([ADR 0007](/docs/adr/0007-a2a-inbound-adapter)).
+
 ## Helm
 
 `charts/exception-management/values.yaml` maps every key 1:1 to an env var
@@ -63,6 +76,8 @@ by default**:
 ```yaml
 mcp:
   enabled: true   # component=mcp, Service <fullname>-mcp:8090
+a2a:
+  enabled: true   # component=a2a, Service <fullname>-a2a:8093 (A2A_AGENT_URL defaults to its DNS name)
 ```
 
 Probe wiring and the shutdown budget are on the [Runbook](/docs/operations/runbook) page.
