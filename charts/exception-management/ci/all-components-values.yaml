@@ -1,5 +1,5 @@
 # Used by `helm lint` / `ct lint`: every optional value and component set at
-# once (api + mcp), so a template that renders alone but collides with
+# once (api + mcp + a2a), so a template that renders alone but collides with
 # another is caught by `helm lint`.
 database:
   existingSecret: "exception-management-db"
@@ -22,6 +22,17 @@ config:
 # The optional mcp component on, together with the api (and its Kong route:
 # mcp.route is off by default in the chart's values).
 mcp:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+
+# The optional a2a component on as well (read-only Agent2Agent agent, its Kong
+# route on with the same parent as the mcp one).
+a2a:
   enabled: true
   route:
     enabled: true

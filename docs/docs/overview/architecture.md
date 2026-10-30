@@ -77,7 +77,8 @@ Two, in separate domain packages ([ADR 0002](/docs/adr/0002-aggregates-and-polic
 | --- | --- | --- |
 | `cmd/api` | REST `:8080`, the six fact consumers, the correlation consumer, the SLA sweeper, the outbox relay | — |
 | `cmd/mcp` | read-only MCP over Streamable HTTP `:8090` (`/mcp`, `GET /healthz`) | never writes, never dials Kafka, never runs the relay or the sweeper |
+| `cmd/a2a` | read-only A2A agent, JSON-RPC over HTTP `:8093` (`/`, `/a2a`, the card at `/.well-known/agent-card.json`, `GET /healthz`) | never writes, never dials Kafka, never runs the relay or the sweeper |
 
 The [generated REST reference](/docs/api-reference) and the [MCP tools page](/docs/mcp/tools)
-document the two surfaces. The `internal/adapters/outbound/memory` package exists for tests only;
+document the REST and MCP surfaces; the A2A agent is described in [ADR 0007](/docs/adr/0007-a2a-inbound-adapter). The `internal/adapters/outbound/memory` package exists for tests only;
 a shipped `cmd/**` binary never imports it (a fitness test enforces it).
