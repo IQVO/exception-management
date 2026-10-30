@@ -11,7 +11,8 @@ selector.matchLabels and its pod labels, and every Service selects on it, so
 each Service selects EXACTLY ONE Deployment. This test fails if that ever
 stops being true.
 
-Components: api (always), mcp (the read-only ops-agent surface, default off)
+Components: api (always), mcp (the read-only ops-agent surface, default off),
+a2a (the read-only Agent2Agent agent, default off)
 and frontend (the exceptions_mfe Module Federation remote, default off). The
 enabled renders run the components TOGETHER.
 
@@ -42,6 +43,7 @@ BASE = [
 ]
 ENABLE_EVERYTHING = BASE + [
     "--set", "mcp.enabled=true",
+    "--set", "a2a.enabled=true",
     "--set", "config.outboxRelayInterval=500ms",
     "--set", "config.shutdownDrainDelay=5s",
     "--set", "config.slaSweepInterval=45s",
@@ -112,13 +114,13 @@ def check_selectors(docs: list[dict], failures: list[str]) -> None:
     services = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Service"}
     deployments = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Deployment"}
 
-    expected = {RELEASE, f"{RELEASE}-mcp"}
+    expected = {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-a2a"}
     if set(deployments) != expected:
         failures.append(f"expected Deployments {sorted(expected)}, got {sorted(deployments)}")
     if set(services) != expected:
         failures.append(f"expected a Service per Deployment, got {sorted(services)}")
 
-    for name, component in ((RELEASE, "api"), (f"{RELEASE}-mcp", "mcp")):
+    for name, component in ((RELEASE, "api"), (f"{RELEASE}-mcp", "mcp"), (f"{RELEASE}-a2a", "a2a")):
         if name in services and selector_of(services[name]).get("app.kubernetes.io/component") != component:
             failures.append(f"Service {name} selector must pin component={component}")
         if name in deployments:
@@ -158,6 +160,7 @@ def check_selectors(docs: list[dict], failures: list[str]) -> None:
 
     check_env(api, failures)
     check_mcp(deployments.get(f"{RELEASE}-mcp"), failures)
+    check_a2a(deployments.get(f"{RELEASE}-a2a"), failures)
 
 
 def command_of(dep: dict) -> list[str] | None:
@@ -185,6 +188,34 @@ def check_mcp(dep: dict | None, failures: list[str]) -> None:
     for want in ("DATABASE_URL", "MIGRATIONS_DATABASE_URL", "MCP_ADDR", "LOG_LEVEL"):
         if want not in env:
             failures.append(f"the MCP Deployment does not render {want}")
+
+
+def check_a2a(dep: dict | None, failures: list[str]) -> None:
+    """The A2A agent is cmd/mcp's read-only twin: Postgres only, never Kafka."""
+    if dep is None:
+        return
+    if command_of(dep) != ["/app/a2a"]:
+        failures.append("the A2A Deployment must run /app/a2a")
+    env = set(env_names(dep))
+    stray = {
+        "KAFKA_BROKERS", "EVENT_PUBLISHER", "OUTBOX_RELAY_INTERVAL", "OUTBOX_MAX_ATTEMPTS", "SHUTDOWN_DRAIN_DELAY",
+        "SLA_SWEEP_INTERVAL",
+        "FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP",
+        "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
+        "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
+        "CARTON_DISCREPANCY_CONSUMER_GROUP",
+    } & env
+    stray.update(mode_names(env_names(dep)))
+    if stray:
+        failures.append(f"the A2A Deployment must not get Kafka/publisher/relay/sweep/consumer env (read-only, never dials Kafka): {sorted(stray)}")
+    for want in ("DATABASE_URL", "MIGRATIONS_DATABASE_URL", "A2A_ADDR", "A2A_AGENT_URL", "LOG_LEVEL"):
+        if want not in env:
+            failures.append(f"the A2A Deployment does not render {want}")
+    if env_value(dep, "A2A_ADDR") != ":8093":
+        failures.append(f"the A2A Deployment must listen on :8093, got {env_value(dep, 'A2A_ADDR')!r}")
+    url = env_value(dep, "A2A_AGENT_URL") or ""
+    if not (url.startswith("http://") and url.endswith("-a2a.default.svc.cluster.local:8093/")):
+        failures.append(f"A2A_AGENT_URL must default to the in-cluster Service DNS, got {url!r}")
 
 
 def check_env(api: dict, failures: list[str]) -> None:
@@ -221,7 +252,7 @@ def check_defaults(failures: list[str]) -> None:
     kinds = sorted(d["kind"] for d in defaults)
     if sorted(k for k in kinds if k in {"Deployment", "Service"}) != ["Deployment", "Service"]:
         failures.append("default values must deploy the api only (one Deployment, one Service)")
-    stray = [d["metadata"]["name"] for d in defaults if d["metadata"]["name"].endswith(("-mcp", "-frontend", "-projector", "-reports"))]
+    stray = [d["metadata"]["name"] for d in defaults if d["metadata"]["name"].endswith(("-mcp", "-a2a", "-frontend", "-projector", "-reports"))]
     if stray:
         failures.append(f"optional components rendered with default values: {stray}")
     dep = next(d for d in defaults if d.get("kind") == "Deployment")
@@ -248,6 +279,8 @@ def check_refusals(failures: list[str]) -> None:
          BASE + ["--set", "extraEnv[0].name=EXCEPTIONS_MODE", "--set", "extraEnv[0].value=permissive"], "EXCEPTIONS_MODE"),
         ("a *_MODE variable through mcp.extraEnv",
          BASE + ["--set", "mcp.enabled=true", "--set", "mcp.extraEnv[0].name=MCP_MODE", "--set", "mcp.extraEnv[0].value=stdio"], "MCP_MODE"),
+        ("a *_MODE variable through a2a.extraEnv",
+         BASE + ["--set", "a2a.enabled=true", "--set", "a2a.extraEnv[0].name=A2A_MODE", "--set", "a2a.extraEnv[0].value=stdio"], "A2A_MODE"),
         ("analytics on without a DSN source",
          BASE + ["--set", "analytics.enabled=true"], "ANALYTICS_DATABASE_URL"),
         ("analytics on with an empty consumer group",
@@ -313,6 +346,12 @@ def check_frontend(failures: list[str]) -> None:
     check_component_set(
         ["--set", "mcp.enabled=true", "--set", "frontend.enabled=true"],
         {RELEASE: "api", f"{RELEASE}-mcp": "mcp", f"{RELEASE}-frontend": "frontend"},
+        failures,
+    )
+
+    check_component_set(
+        ["--set", "mcp.enabled=true", "--set", "a2a.enabled=true", "--set", "frontend.enabled=true"],
+        {RELEASE: "api", f"{RELEASE}-mcp": "mcp", f"{RELEASE}-a2a": "a2a", f"{RELEASE}-frontend": "frontend"},
         failures,
     )
 
@@ -445,13 +484,13 @@ def main() -> int:
             print(f"FAIL: {f}")
         return 1
 
-    print("PASS: every Service selects exactly one Deployment (api, mcp, frontend, analytics projector/reports); "
-          "mcp, frontend and analytics are off by default; the projector has no Service and never sees OLTP env, "
+    print("PASS: every Service selects exactly one Deployment (api, mcp, a2a, frontend, analytics projector/reports); "
+          "mcp, a2a, frontend and analytics are off by default; the projector has no Service and never sees OLTP env, "
           "the reports binary never dials Kafka; the frontend pod carries no env and its Service stays ClusterIP; "
           "every cmd/api env var has a dedicated value and no *_MODE is rendered; "
           "the chart refuses to render without a database source, without brokers, "
           "with an empty consumer group, with analytics on but no DSN source or consumer group, "
-          "with a *_MODE injected through extraEnv or mcp.extraEnv, or with a too-short termination grace period")
+          "with a *_MODE injected through extraEnv, mcp.extraEnv or a2a.extraEnv, or with a too-short termination grace period")
     return 0
 
 

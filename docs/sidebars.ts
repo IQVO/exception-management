@@ -118,6 +118,11 @@ const sidebars: SidebarsConfig = {
           label: '0005 Outbox relay attempt cap and DLQ',
           href: '/docs/adr/0005-outbox-relay-attempt-cap-and-dlq',
         },
+        {
+          type: 'link',
+          label: '0007 A2A inbound adapter',
+          href: '/docs/adr/0007-a2a-inbound-adapter',
+        },
       ],
     },
   ],
