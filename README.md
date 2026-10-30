@@ -1,5 +1,7 @@
 # exception-management
 
+[![CI](https://github.com/IQVO/exception-management/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/IQVO/exception-management/actions/workflows/ci.yml?query=branch%3Adevelop) [![coverage gate](https://img.shields.io/badge/coverage%20gate-90%25-brightgreen)](https://github.com/IQVO/exception-management/blob/develop/Makefile) [![Go](https://img.shields.io/badge/go-1.27.3-00ADD8?logo=go&logoColor=white)](https://github.com/IQVO/exception-management/blob/develop/go.mod) [![docs](https://img.shields.io/badge/docs-iqvo.github.io-blue)](https://iqvo.github.io/exception-management/) [![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/IQVO/exception-management/blob/develop/LICENSE)
+
 The **Exception Management** bounded context of the `warehouse-systems`
 fleet — WES-tier **Supporting Subdomain**, the warehouse's "Problem Solve".
 It turns the anomaly facts other contexts already publish (missed CPTs,
