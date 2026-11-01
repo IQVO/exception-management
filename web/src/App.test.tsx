@@ -28,9 +28,9 @@ function mountUnderHost(path: string) {
 
 function routes() {
   return mockApi({
-    "GET /exceptions": json([openCase()]),
+    "GET /exceptions": json({ items: [openCase()] }),
     [`GET /exceptions/${CASE_ID}`]: json(openCase()),
-    "GET /exception-policies": json([policy()]),
+    "GET /exception-policies": json({ items: [policy()] }),
   });
 }
 
@@ -93,7 +93,7 @@ describe("App (the exposed ./App)", () => {
 
   it("renders a resolved case's terminal view without any command form", async () => {
     mockApi({
-      "GET /exceptions": json([]),
+      "GET /exceptions": json({ items: [] }),
       [`GET /exceptions/${CASE_ID}`]: json(resolvedCase()),
     });
     mount(`/exceptions/${CASE_ID}`);

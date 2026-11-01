@@ -17,9 +17,9 @@ function mount() {
 function routes(case_: ReturnType<typeof openCase>) {
   return mockApi({
     [`GET /exceptions/${CASE_ID}`]: json(case_),
-    [`POST /exceptions/${CASE_ID}/triage`]: json({ ...case_, status: "TRIAGED" }),
-    [`POST /exceptions/${CASE_ID}/assign`]: json({ ...case_, status: "ASSIGNED", assignee: "op-marc" }),
-    [`POST /exceptions/${CASE_ID}/resolve`]: json(resolvedCase()),
+    [`POST /exceptions/${CASE_ID}/triage-decisions`]: json({ ...case_, status: "TRIAGED" }),
+    [`POST /exceptions/${CASE_ID}/assignments`]: json({ ...case_, status: "ASSIGNED", assignee: "op-marc" }),
+    [`POST /exceptions/${CASE_ID}/resolutions`]: json(resolvedCase()),
   });
 }
 
@@ -48,7 +48,7 @@ describe("CaseDetailScreen", () => {
     await userEvent.type(queue, "cps-inbound");
     await userEvent.click(screen.getByRole("button", { name: "Triage case" }));
     expect(await screen.findByText("Case triaged.")).toBeInTheDocument();
-    const post = api.to(`POST /exceptions/${CASE_ID}/triage`)[0];
+    const post = api.to(`POST /exceptions/${CASE_ID}/triage-decisions`)[0];
     expect(post.headers["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/);
     expect(post.body).toEqual({ severity: "CRITICAL", queue: "cps-inbound" });
     // the reload after the command re-fetched the case
@@ -63,7 +63,7 @@ describe("CaseDetailScreen", () => {
     await userEvent.clear(queue);
     expect(screen.getByRole("button", { name: "Triage case" })).toBeDisabled();
     expect(screen.getByText("A queue is required.")).toBeInTheDocument();
-    expect(api.to(`POST /exceptions/${CASE_ID}/triage`)).toHaveLength(0);
+    expect(api.to(`POST /exceptions/${CASE_ID}/triage-decisions`)).toHaveLength(0);
   });
 
   it("assigns: POSTs the operator id with a fresh Idempotency-Key", async () => {
@@ -73,7 +73,7 @@ describe("CaseDetailScreen", () => {
     await userEvent.type(screen.getByLabelText(/^Assignee/), "op-marc");
     await userEvent.click(screen.getByRole("button", { name: "Assign case" }));
     expect(await screen.findByText("Case assigned.")).toBeInTheDocument();
-    const post = api.to(`POST /exceptions/${CASE_ID}/assign`)[0];
+    const post = api.to(`POST /exceptions/${CASE_ID}/assignments`)[0];
     expect(post.headers["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/);
     expect(post.body).toEqual({ assignee: "op-marc" });
   });
@@ -92,7 +92,7 @@ describe("CaseDetailScreen", () => {
     await userEvent.type(screen.getByLabelText(/^Root cause/), "OPERATOR_UNAVAILABLE");
     await userEvent.click(screen.getByRole("button", { name: "Resolve case" }));
     expect(await screen.findByText("Case resolved.")).toBeInTheDocument();
-    const post = api.to(`POST /exceptions/${CASE_ID}/resolve`)[0];
+    const post = api.to(`POST /exceptions/${CASE_ID}/resolutions`)[0];
     expect(post.headers["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/);
     expect(post.body).toEqual({ resolutionCode: "WORK_COMPLETED", rootCause: "OPERATOR_UNAVAILABLE" });
   });
@@ -106,7 +106,7 @@ describe("CaseDetailScreen", () => {
     await userEvent.type(screen.getByLabelText(/Note \(optional\)/), "Picked during the recovery sweep.");
     await userEvent.click(screen.getByRole("button", { name: "Resolve case" }));
     expect(await screen.findByText("Case resolved.")).toBeInTheDocument();
-    expect(api.to(`POST /exceptions/${CASE_ID}/resolve`)[0].body).toEqual({
+    expect(api.to(`POST /exceptions/${CASE_ID}/resolutions`)[0].body).toEqual({
       resolutionCode: "WORK_COMPLETED",
       rootCause: "OPERATOR_UNAVAILABLE",
       note: "Picked during the recovery sweep.",
@@ -121,13 +121,13 @@ describe("CaseDetailScreen", () => {
     await userEvent.type(screen.getByLabelText(/^Root cause/), "OPERATOR_UNAVAILABLE");
     expect(screen.getByRole("button", { name: "Resolve case" })).toBeDisabled();
     expect(screen.getByText(/uppercase letters, digits and underscores/)).toBeInTheDocument();
-    expect(api.to(`POST /exceptions/${CASE_ID}/resolve`)).toHaveLength(0);
+    expect(api.to(`POST /exceptions/${CASE_ID}/resolutions`)).toHaveLength(0);
   });
 
   it("words the terminal 409 for the operator and keeps the case on screen", async () => {
     mockApi({
       [`GET /exceptions/${CASE_ID}`]: json(openCase()),
-      [`POST /exceptions/${CASE_ID}/resolve`]: problem(
+      [`POST /exceptions/${CASE_ID}/resolutions`]: problem(
         409,
         "case-already-resolved",
         "The case is already resolved",

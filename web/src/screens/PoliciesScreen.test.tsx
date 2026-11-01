@@ -15,7 +15,7 @@ function mount() {
 
 describe("PoliciesScreen", () => {
   it("lists the current policy version of every declared source type", async () => {
-    mockApi({ "GET /exception-policies": json([policy(), manualPolicy()]) });
+    mockApi({ "GET /exception-policies": json({ items: [policy(), manualPolicy()] }) });
     mount();
     expect(await screen.findByText(/TaskCPTMissed/)).toBeInTheDocument();
     expect(screen.getByText(/DiscrepancyDetected/)).toBeInTheDocument();
@@ -25,14 +25,14 @@ describe("PoliciesScreen", () => {
   });
 
   it("spells the auto-resolve rule and shows no-reading for its absence", async () => {
-    mockApi({ "GET /exception-policies": json([policy(), manualPolicy()]) });
+    mockApi({ "GET /exception-policies": json({ items: [policy(), manualPolicy()] }) });
     mount();
     expect(await screen.findByText(/OrderRepromised within 60 min/)).toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument(); // manualPolicy has no rule
   });
 
   it("notes when no policy is declared at all", async () => {
-    mockApi({ "GET /exception-policies": json([]) });
+    mockApi({ "GET /exception-policies": json({ items: [] }) });
     mount();
     expect(await screen.findByText(/No policies declared/)).toBeInTheDocument();
   });

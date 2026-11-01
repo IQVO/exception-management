@@ -16,7 +16,7 @@ function mount() {
 
 describe("ExceptionQueueScreen", () => {
   it("lists cases newest-first with their status, severity and queue", async () => {
-    mockApi({ "GET /exceptions": json([openCase()]) });
+    mockApi({ "GET /exceptions": json({ items: [openCase()] }) });
     mount();
     expect(await screen.findByText(CASE_ID)).toBeInTheDocument();
     // the status pill (a span) -- the filter <option> carries the same text
@@ -28,7 +28,7 @@ describe("ExceptionQueueScreen", () => {
   });
 
   it("applies the status/queue/site/sourceType filters as query parameters", async () => {
-    const api = mockApi({ "GET /exceptions": json([openCase()]) });
+    const api = mockApi({ "GET /exceptions": json({ items: [openCase()] }) });
     mount();
     await screen.findByText(CASE_ID);
     await userEvent.selectOptions(screen.getByLabelText("Status"), "OPEN");
@@ -48,13 +48,13 @@ describe("ExceptionQueueScreen", () => {
   });
 
   it("keeps the request header-less until filters apply (simple CORS GET)", async () => {
-    mockApi({ "GET /exceptions": json([openCase()]) });
+    mockApi({ "GET /exceptions": json({ items: [openCase()] }) });
     mount();
     await screen.findByText(CASE_ID);
   });
 
   it("shows the empty note when no case matches", async () => {
-    mockApi({ "GET /exceptions": json([]) });
+    mockApi({ "GET /exceptions": json({ items: [] }) });
     mount();
     expect(await screen.findByText("No cases match these filters.")).toBeInTheDocument();
   });
@@ -67,7 +67,7 @@ describe("ExceptionQueueScreen", () => {
   });
 
   it("blocks a whitespace-only queue filter from being applied", async () => {
-    const api = mockApi({ "GET /exceptions": json([openCase()]) });
+    const api = mockApi({ "GET /exceptions": json({ items: [openCase()] }) });
     mount();
     await screen.findByText(CASE_ID);
     await userEvent.type(screen.getByLabelText("Queue"), "  ");
