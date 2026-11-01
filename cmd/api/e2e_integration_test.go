@@ -28,12 +28,13 @@ import (
 // auto-creation OFF, so the test controls when each topic appears — and
 // readiness, which is reachability only, never depends on them.
 //
-// The case lifecycle (triage/assign/resolve) cannot be driven over HTTP
-// here BY DESIGN: no POST /exceptions exists and the inbound consumers that
-// open cases are the next build step — the handler tests over the memory
-// doubles cover the lifecycle; this proof covers the composition root, the
-// probes, the Idempotency-Key store on real Postgres and the outbox relay
-// to Kafka.
+// The case lifecycle (triage-decisions/assignments/resolutions) cannot be
+// driven over HTTP here BY DESIGN: no POST /exceptions creates a case and
+// the inbound consumers that open cases are the next build step — the
+// handler tests over the memory doubles cover the lifecycle, and
+// idempotency_integration_test.go drives the POSTs over real Postgres; this
+// proof covers the composition root, the probes, the Idempotency-Key store
+// on real Postgres and the outbox relay to Kafka.
 
 const (
 	topicEvents    = "warehouse.exception-management.events"
@@ -213,16 +214,24 @@ func TestRealEntryPointServesRestAndRelaysToKafka(t *testing.T) {
 
 	// Phase 2: the REST surface over the real Postgres wiring.
 	t.Run("the rest surface answers over real postgres", func(t *testing.T) {
-		if raw := s.call(http.MethodGet, "/exceptions", "", http.StatusOK, nil); strings.TrimSpace(raw) != "[]" {
-			t.Fatalf("empty list = %q, want []", raw)
+		if raw := s.call(http.MethodGet, "/exceptions", "", http.StatusOK, nil); strings.TrimSpace(raw) != `{"items":[]}` {
+			t.Fatalf("empty list = %q, want {\"items\":[]}", raw)
 		}
 		raw := s.call(http.MethodGet, "/exceptions/case-unknown", "", http.StatusNotFound, nil)
 		if !strings.Contains(raw, "case-not-found") {
 			t.Fatalf("unknown case = %s, want the case-not-found problem", raw)
 		}
-		raw = s.call(http.MethodPost, "/exceptions", `{}`, http.StatusMethodNotAllowed, nil)
+		raw = s.call(http.MethodPost, "/exceptions", `{}`, http.StatusBadRequest, nil)
+		if !strings.Contains(raw, "idempotency-key-required") {
+			t.Fatalf("POST /exceptions without a key = %s, want idempotency-key-required", raw)
+		}
+		raw = s.call(http.MethodPost, "/exceptions", `{}`, http.StatusMethodNotAllowed, idemKey("k-no-create"))
 		if !strings.Contains(raw, "no POST /exceptions") {
 			t.Fatalf("POST /exceptions = %s, want the explaining 405", raw)
+		}
+		raw = s.call(http.MethodGet, "/exceptions?after=case-1", "", http.StatusBadRequest, nil)
+		if !strings.Contains(raw, "unknown-query-parameter") {
+			t.Fatalf("a retired paging parameter = %s, want unknown-query-parameter", raw)
 		}
 		raw = s.call(http.MethodGet, "/exceptions?status=CLOSED", "", http.StatusBadRequest, nil)
 		if !strings.Contains(raw, "invalid-status") {
@@ -252,7 +261,7 @@ func TestRealEntryPointServesRestAndRelaysToKafka(t *testing.T) {
 		if raw := s.call(http.MethodPut, target, `{"severity":"LOW","queue":"cps-back","slaMinutes":90}`, http.StatusConflict, idemKey("k-1")); !strings.Contains(raw, "idempotency-key-reused") {
 			t.Fatalf("key reuse with another body = %s, want idempotency-key-reused", raw)
 		}
-		if raw := s.call(http.MethodGet, "/exception-policies", "", http.StatusOK, nil); !strings.Contains(raw, `"sourceType":"`+sourceType+`"`) || !strings.Contains(raw, `"version":1`) {
+		if raw := s.call(http.MethodGet, "/exception-policies", "", http.StatusOK, nil); !strings.HasPrefix(raw, `{"items":[`) || !strings.Contains(raw, `"sourceType":"`+sourceType+`"`) || !strings.Contains(raw, `"version":1`) {
 			t.Fatalf("GET /exception-policies = %s", raw)
 		}
 
