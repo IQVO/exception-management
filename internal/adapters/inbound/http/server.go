@@ -24,7 +24,7 @@ type Server struct {
 	Declare      *usecases.DeclareExceptionPolicy
 	ListPolicies *usecases.ListExceptionPolicies
 
-	// Idempotency wraps the POSTs and the PUT (the fleet Idempotency-Key
+	// Idempotency wraps every POST and the PUT (the fleet Idempotency-Key
 	// middleware, Idempotency.Middleware, built by cmd/ over the Postgres
 	// adapters); nil leaves the routes unwrapped (handler unit tests only:
 	// cmd/ always wires it).
@@ -34,10 +34,11 @@ type Server struct {
 }
 
 // NewRouter builds the chi router for every endpoint of apis/openapi.yaml
-// (.claude/rules/rest-api.md). The POST /exceptions route exists only to
-// answer 405 with the reason (there is deliberately no case-creation
-// endpoint: every case opens from a consumed fact, ADR 0001), so it sits
-// OUTSIDE the Idempotency group: a 405 must not demand a key first.
+// (.claude/rules/rest-api.md). Every POST sits in the Idempotency group
+// (REST guideline R3), POST /exceptions included: it exists only to answer
+// 405 with the reason (there is deliberately no case-creation endpoint:
+// every case opens from a consumed fact, ADR 0001), and like every POST it
+// demands a key first and stores and replays that deterministic answer.
 func NewRouter(s *Server) http.Handler {
 	r := chi.NewRouter()
 
@@ -49,7 +50,6 @@ func NewRouter(s *Server) http.Handler {
 	r.Get("/metrics", handleMetrics)
 
 	r.Get("/exceptions", s.handleListExceptions)
-	r.Post("/exceptions", s.handleNoPostExceptions)
 	r.Get("/exceptions/{caseId}", s.handleGetException)
 
 	r.Get("/exception-policies", s.handleListPolicies)
@@ -58,9 +58,10 @@ func NewRouter(s *Server) http.Handler {
 		if s.Idempotency != nil {
 			r.Use(s.Idempotency)
 		}
-		r.Post("/exceptions/{caseId}/triage", s.handleTriageException)
-		r.Post("/exceptions/{caseId}/assign", s.handleAssignException)
-		r.Post("/exceptions/{caseId}/resolve", s.handleResolveException)
+		r.Post("/exceptions", s.handleNoPostExceptions)
+		r.Post("/exceptions/{caseId}/triage-decisions", s.handleTriageException)
+		r.Post("/exceptions/{caseId}/assignments", s.handleAssignException)
+		r.Post("/exceptions/{caseId}/resolutions", s.handleResolveException)
 		r.Put("/exception-policies/{sourceType}", s.handleDeclarePolicy)
 	})
 

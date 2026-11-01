@@ -6,28 +6,6 @@ import (
 	"github.com/claudioed/exception-management/internal/application/usecases"
 )
 
-// handleListExceptions backs GET /exceptions: 200 with the matching cases
-// (an EMPTY LIST, never a 404). status, queue, site and sourceType narrow
-// the list; no status filter means every status, resolved cases included.
-func (s *Server) handleListExceptions(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	status, err := statusFilter(q.Get("status"))
-	if err != nil {
-		writeError(w, r, err)
-		return
-	}
-	views, err := s.List.Execute(r.Context(), status, q.Get("queue"), q.Get("site"), q.Get("sourceType"))
-	if err != nil {
-		writeError(w, r, err)
-		return
-	}
-	out := make([]caseDTO, 0, len(views))
-	for _, v := range views {
-		out = append(out, toCase(v))
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
 // handleGetException backs GET /exceptions/{caseId}.
 func (s *Server) handleGetException(w http.ResponseWriter, r *http.Request) {
 	id, err := caseIDParam(r)
@@ -43,7 +21,7 @@ func (s *Server) handleGetException(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toCase(v))
 }
 
-// handleTriageException backs POST /exceptions/{caseId}/triage: sets or
+// handleTriageException backs POST /exceptions/{caseId}/triage-decisions: sets or
 // changes the severity and queue, and moves an OPEN case to TRIAGED.
 func (s *Server) handleTriageException(w http.ResponseWriter, r *http.Request) {
 	id, err := caseIDParam(r)
@@ -74,7 +52,7 @@ func (s *Server) handleTriageException(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toCase(usecases.CaseView(c)))
 }
 
-// handleAssignException backs POST /exceptions/{caseId}/assign: gives the
+// handleAssignException backs POST /exceptions/{caseId}/assignments: gives the
 // case an owner and moves it to ASSIGNED (reassignment allowed).
 func (s *Server) handleAssignException(w http.ResponseWriter, r *http.Request) {
 	id, err := caseIDParam(r)
@@ -100,7 +78,7 @@ func (s *Server) handleAssignException(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toCase(usecases.CaseView(c)))
 }
 
-// handleResolveException backs POST /exceptions/{caseId}/resolve: records
+// handleResolveException backs POST /exceptions/{caseId}/resolutions: records
 // the resolution code and root cause and moves the case to its terminal
 // state. note is optional.
 func (s *Server) handleResolveException(w http.ResponseWriter, r *http.Request) {
@@ -137,21 +115,6 @@ func (s *Server) handleResolveException(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, toCase(usecases.CaseView(c)))
-}
-
-// handleListPolicies backs GET /exception-policies: the current policy
-// version of every declared source type (an empty list is 200 with []).
-func (s *Server) handleListPolicies(w http.ResponseWriter, r *http.Request) {
-	views, err := s.ListPolicies.Execute(r.Context())
-	if err != nil {
-		writeError(w, r, err)
-		return
-	}
-	out := make([]policyDTO, 0, len(views))
-	for _, v := range views {
-		out = append(out, toPolicy(v))
-	}
-	writeJSON(w, http.StatusOK, out)
 }
 
 // handleDeclarePolicy backs PUT /exception-policies/{sourceType}: declares

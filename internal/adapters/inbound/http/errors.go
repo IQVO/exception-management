@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/claudioed/exception-management/internal/adapters/inbound/http/page"
 	"github.com/claudioed/exception-management/internal/application/ports"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
@@ -64,6 +65,7 @@ var internalProblem = problem{status: http.StatusInternalServerError, slug: "int
 // before any use case runs.
 var (
 	idempotencyKeyRequired = problem{status: http.StatusBadRequest, slug: "idempotency-key-required", title: "Idempotency-Key header is required"}
+	idempotencyKeyInvalid  = problem{status: http.StatusBadRequest, slug: "idempotency-key-invalid", title: "Idempotency-Key header is invalid"}
 	idempotencyKeyReused   = problem{status: http.StatusConflict, slug: "idempotency-key-reused", title: "Idempotency-Key was already used with a different request"}
 	notFoundProblem        = problem{status: http.StatusNotFound, slug: "not-found", title: "Not found"}
 	methodNotAllowed       = problem{status: http.StatusMethodNotAllowed, slug: "method-not-allowed", title: "Method not allowed"}
@@ -108,6 +110,13 @@ var problemCatalogue = []struct {
 	{errInvalidAssignee, invalidAssigneeProblem},
 	{errInvalidResolution, invalidResolutionProblem},
 	{errInvalidPolicy, invalidPolicyProblem},
+
+	// The paging parameters of a collection GET (REST guideline 3 and 4.2).
+	{page.ErrInvalidLimit, problem{status: http.StatusBadRequest, slug: "invalid-limit", title: "Limit is invalid",
+		detail: page.ErrInvalidLimit.Error()}},
+	{page.ErrInvalidCursor, problem{status: http.StatusBadRequest, slug: "invalid-cursor", title: "Cursor is invalid",
+		detail: page.ErrInvalidCursor.Error()}},
+	{errUnknownQueryParameter, problem{status: http.StatusBadRequest, slug: "unknown-query-parameter", title: "Query parameter is not supported"}},
 
 	// The domain's own validation is the backstop behind the adapter's; the
 	// same slugs, so a rule missed here cannot become a 500.

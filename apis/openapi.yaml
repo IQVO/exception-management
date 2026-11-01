@@ -506,7 +506,7 @@ components:
       name: limit
       in: query
       required: false
-      description: Page size, 1 to 500 (default 100); anything else is 400 `invalid-limit`.
+      description: Page size, 1 to 500 (default 100); anything else is 400 `invalid-limit`. A query parameter the collection does not declare (`after`, `offset`, `nextToken`, ...) is 400 `unknown-query-parameter`.
       schema:
         type: integer
         minimum: 1
@@ -644,6 +644,14 @@ components:
                 title: Cursor is invalid
                 status: 400
                 detail: cursor is not a valid page token
+                instance: /exceptions
+            unknownQueryParameter:
+              summary: A query parameter the collection does not declare (for example a retired paging parameter)
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/unknown-query-parameter
+                title: Query parameter is not supported
+                status: 400
+                detail: "query parameter is not supported: after"
                 instance: /exceptions
     NotFound:
       description: No case has this id, or the path holds a NUL byte.

@@ -101,8 +101,8 @@ func TestProblemSlugsMatchTheContract(t *testing.T) {
 	exampleSlugs(loadSpec(t), documented)
 
 	produced := map[string]bool{
-		internalProblem.slug: true, idempotencyKeyRequired.slug: true, idempotencyKeyReused.slug: true,
-		dependencyUnavailable.slug: true, notFoundProblem.slug: true, methodNotAllowed.slug: true,
+		internalProblem.slug: true, idempotencyKeyRequired.slug: true, idempotencyKeyInvalid.slug: true,
+		idempotencyKeyReused.slug: true, dependencyUnavailable.slug: true, notFoundProblem.slug: true, methodNotAllowed.slug: true,
 	}
 	for _, entry := range problemCatalogue {
 		produced[entry.p.slug] = true
@@ -147,7 +147,8 @@ func TestProblemStatusesMatchTheContract(t *testing.T) {
 	collect(responses)
 	produced := map[string]problem{
 		internalProblem.slug: internalProblem, idempotencyKeyRequired.slug: idempotencyKeyRequired,
-		idempotencyKeyReused.slug: idempotencyKeyReused, dependencyUnavailable.slug: dependencyUnavailable,
+		idempotencyKeyInvalid.slug: idempotencyKeyInvalid,
+		idempotencyKeyReused.slug:  idempotencyKeyReused, dependencyUnavailable.slug: dependencyUnavailable,
 		notFoundProblem.slug: notFoundProblem, methodNotAllowed.slug: methodNotAllowed,
 	}
 	for _, entry := range problemCatalogue {

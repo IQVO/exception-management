@@ -86,14 +86,19 @@ func (r *PolicyRepo) Get(ctx context.Context, sourceType string) (*exceptionpoli
 	return p, nil
 }
 
-// List implements ports.ExceptionPolicyRepo: the LATEST declared version of
-// every source type, ordered by source type (GET /exception-policies).
-func (r *PolicyRepo) List(ctx context.Context) ([]*exceptionpolicy.Policy, error) {
+// ListPage implements ports.ExceptionPolicyRepo: the LATEST declared version
+// of every source type, ordered by source type, strictly after the source
+// type `after` ("" = from the start), at most limit rows (GET
+// /exception-policies). The source type is the keyset: one row per type, so
+// it is its own tiebreaker.
+func (r *PolicyRepo) ListPage(ctx context.Context, after string, limit int) ([]*exceptionpolicy.Policy, error) {
 	rows, err := queryFor(ctx, r.pool).Query(ctx, `
 		SELECT DISTINCT ON (source_type) `+policyColumns+`
 		FROM exception_policies
+		WHERE ($1 = '' OR source_type > $1)
 		ORDER BY source_type, version DESC
-	`)
+		LIMIT $2
+	`, after, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list exception policies: %w", err)
 	}
