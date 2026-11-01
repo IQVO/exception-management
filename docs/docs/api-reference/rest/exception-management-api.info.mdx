@@ -36,8 +36,9 @@ threshold, an at-risk acknowledgement, a count discrepancy, an unexpected
 return); this API is where operators triage, assign and resolve those
 cases, and where the handling policy per source type is declared.
 
-There is deliberately **no `POST /exceptions`**: a case is always a
-consumed fact, and a repeated fact touches the open case (occurrence
+There is deliberately **no case creation over REST** (`POST /exceptions`
+is always a keyed `405`): a case is always a consumed fact, and a
+repeated fact touches the open case (occurrence
 count, `lastSeenAt`) instead of opening another. `status` runs
 `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`; `RESOLVED` requires a
 resolution code and is terminal; `escalated` is a flag set by the SLA
@@ -45,7 +46,10 @@ sweeper, never a state and never a blocker.
 
 Events are published as CloudEvents on
 `warehouse.exception-management.events` through a transactional outbox
-(see `apis/asyncapi.yaml`, ADR 0004). Errors are RFC 7807 problem
+(see `apis/asyncapi.yaml`, ADR 0004). Every `POST` is idempotent: send an
+`Idempotency-Key`; a replay carries `Idempotency-Replayed: true`. Lists
+are keyset-paged (`limit`, `cursor`) and answer `{items, nextCursor}`.
+Errors are RFC 7807 problem
 documents with
 `type = https://errors.exception-management.warehouse-systems.dev/<slug>`.
 There is no authentication layer (fleet decision 2026-09-11).

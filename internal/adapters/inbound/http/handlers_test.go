@@ -10,11 +10,23 @@ import (
 // One test per route (the route table of .claude/rules/rest-api.md), plus
 // the problem mapping each handler owns.
 
-func TestListExceptionsEmptyIs200WithEmptyArray(t *testing.T) {
+// casePage and policyPage are the {items, nextCursor} envelopes the list
+// routes answer.
+type casePage struct {
+	Items      []caseDTO `json:"items"`
+	NextCursor string    `json:"nextCursor"`
+}
+
+type policyPage struct {
+	Items      []policyDTO `json:"items"`
+	NextCursor string      `json:"nextCursor"`
+}
+
+func TestListExceptionsEmptyIs200WithEmptyPage(t *testing.T) {
 	f := newFixture(t)
 	rec := mustCall(t, f.router(), http.MethodGet, "/exceptions", "", http.StatusOK, nil)
-	if strings.TrimSpace(rec.Body.String()) != "[]" {
-		t.Fatalf("empty list = %q, want []", rec.Body.String())
+	if strings.TrimSpace(rec.Body.String()) != `{"items":[]}` {
+		t.Fatalf("empty list = %q, want {\"items\":[]}", rec.Body.String())
 	}
 }
 
@@ -26,30 +38,32 @@ func TestListExceptionsFiltersAndNewestFirst(t *testing.T) {
 	resolved := f.openCase(t, "ord-3-line-1", "SIM1", 2*time.Minute)
 	f.resolveAt(t, resolved, 3*time.Minute)
 
-	var all []caseDTO
-	decodeBody(t, mustCall(t, f.router(), http.MethodGet, "/exceptions", "", http.StatusOK, nil), &all)
-	if len(all) != 3 {
+	var allPage casePage
+	decodeBody(t, mustCall(t, f.router(), http.MethodGet, "/exceptions", "", http.StatusOK, nil), &allPage)
+	all := allPage.Items
+	if len(all) != 3 || allPage.NextCursor != "" {
 		t.Fatalf("all = %d cases, want 3 (resolved activity is part of the record)", len(all))
 	}
 	if all[0].CaseID != resolved || all[1].CaseID != newer || all[2].CaseID != older {
 		t.Fatalf("order = %s,%s,%s, want newest first %s,%s,%s", all[0].CaseID, all[1].CaseID, all[2].CaseID, resolved, newer, older)
 	}
 
-	var onlyResolved []caseDTO
+	var onlyResolved casePage
 	decodeBody(t, mustCall(t, f.router(), http.MethodGet, "/exceptions?status=RESOLVED", "", http.StatusOK, nil), &onlyResolved)
-	if len(onlyResolved) != 1 || onlyResolved[0].CaseID != resolved {
+	if len(onlyResolved.Items) != 1 || onlyResolved.Items[0].CaseID != resolved {
 		t.Fatalf("status=RESOLVED = %+v", onlyResolved)
 	}
 
-	var bySite []caseDTO
+	var bySite casePage
 	decodeBody(t, mustCall(t, f.router(), http.MethodGet, "/exceptions?site=SIM2&status=OPEN", "", http.StatusOK, nil), &bySite)
-	if len(bySite) != 1 || bySite[0].CaseID != newer {
+	if len(bySite.Items) != 1 || bySite.Items[0].CaseID != newer {
 		t.Fatalf("site=SIM2&status=OPEN = %+v", bySite)
 	}
 
+	bySite = casePage{}
 	decodeBody(t, mustCall(t, f.router(), http.MethodGet, "/exceptions?queue=ps-main&sourceType="+testSourceType, "", http.StatusOK, nil), &bySite)
-	if len(bySite) != 3 {
-		t.Fatalf("queue+sourceType = %d, want 3", len(bySite))
+	if len(bySite.Items) != 3 {
+		t.Fatalf("queue+sourceType = %d, want 3", len(bySite.Items))
 	}
 }
 
@@ -120,7 +134,7 @@ func TestTriageException(t *testing.T) {
 	id := f.openCase(t, "ord-1-line-1", "SIM1", 0)
 
 	var got caseDTO
-	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/triage",
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/triage-decisions",
 		`{"severity":"CRITICAL","queue":"cps-inbound"}`, http.StatusOK, idemKey("k-tri")), &got)
 	if got.Status != "TRIAGED" || got.Severity != "CRITICAL" || got.Queue != "cps-inbound" {
 		t.Fatalf("triaged = %+v", got)
@@ -139,17 +153,17 @@ func TestTriageExceptionProblems(t *testing.T) {
 	id := f.openCase(t, "ord-1-line-1", "SIM1", 0)
 	h := f.router()
 
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage", `{"severity":"SEV1","queue":"q"}`, http.StatusBadRequest, idemKey("k1")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage-decisions", `{"severity":"SEV1","queue":"q"}`, http.StatusBadRequest, idemKey("k1")),
 		http.StatusBadRequest, "invalid-severity")
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage", `{"severity":"HIGH","queue":"  "}`, http.StatusBadRequest, idemKey("k2")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage-decisions", `{"severity":"HIGH","queue":"  "}`, http.StatusBadRequest, idemKey("k2")),
 		http.StatusBadRequest, "invalid-queue")
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage", `{"severity":"HIGH"}`, http.StatusBadRequest, idemKey("k3")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage-decisions", `{"severity":"HIGH"}`, http.StatusBadRequest, idemKey("k3")),
 		http.StatusBadRequest, "invalid-queue")
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage", `{"severity":"HIGH","queue":"q","x":1}`, http.StatusBadRequest, idemKey("k4")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/triage-decisions", `{"severity":"HIGH","queue":"q","x":1}`, http.StatusBadRequest, idemKey("k4")),
 		http.StatusBadRequest, "malformed-request-body")
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/case-404/triage", `{"severity":"HIGH","queue":"q"}`, http.StatusNotFound, idemKey("k5")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/case-404/triage-decisions", `{"severity":"HIGH","queue":"q"}`, http.StatusNotFound, idemKey("k5")),
 		http.StatusNotFound, "case-not-found")
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/nope/triage", `{"severity":"HIGH","queue":"q"}`, http.StatusBadRequest, idemKey("k6")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/nope/triage-decisions", `{"severity":"HIGH","queue":"q"}`, http.StatusBadRequest, idemKey("k6")),
 		http.StatusBadRequest, "invalid-case-id")
 }
 
@@ -159,20 +173,20 @@ func TestAssignException(t *testing.T) {
 	id := f.openCase(t, "ord-1-line-1", "SIM1", 0)
 
 	var got caseDTO
-	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/assign",
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/assignments",
 		`{"assignee":"op-marc"}`, http.StatusOK, idemKey("k-as")), &got)
 	if got.Status != "ASSIGNED" || got.Assignee == nil || *got.Assignee != "op-marc" {
 		t.Fatalf("assigned = %+v", got)
 	}
 
 	// Reassignment is allowed while the case is not resolved.
-	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/assign",
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/assignments",
 		`{"assignee":"op-eva"}`, http.StatusOK, idemKey("k-as2")), &got)
 	if *got.Assignee != "op-eva" {
 		t.Fatalf("reassigned = %v", *got.Assignee)
 	}
 
-	wantProblem(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/assign", `{"assignee":" "}`, http.StatusBadRequest, idemKey("k-as3")),
+	wantProblem(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/assignments", `{"assignee":" "}`, http.StatusBadRequest, idemKey("k-as3")),
 		http.StatusBadRequest, "invalid-assignee")
 }
 
@@ -182,7 +196,7 @@ func TestResolveException(t *testing.T) {
 	id := f.openCase(t, "ord-1-line-1", "SIM1", 0)
 
 	var got caseDTO
-	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/resolve",
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/resolutions",
 		`{"resolutionCode":"WORK_COMPLETED","rootCause":"OPERATOR_UNAVAILABLE"}`, http.StatusOK, idemKey("k-rs")), &got)
 	if got.Status != "RESOLVED" || *got.ResolutionCode != "WORK_COMPLETED" || *got.RootCause != "OPERATOR_UNAVAILABLE" {
 		t.Fatalf("resolved = %+v", got)
@@ -198,16 +212,16 @@ func TestResolveException(t *testing.T) {
 	}
 
 	// RESOLVED is terminal: any later command is the 409 problem.
-	wantProblem(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/resolve",
+	wantProblem(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/resolutions",
 		`{"resolutionCode":"WORK_COMPLETED","rootCause":"OPERATOR_UNAVAILABLE"}`, http.StatusConflict, idemKey("k-rs2")),
 		http.StatusConflict, "case-already-resolved")
-	wantProblem(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/triage",
+	wantProblem(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/triage-decisions",
 		`{"severity":"HIGH","queue":"q"}`, http.StatusConflict, idemKey("k-rs3")),
 		http.StatusConflict, "case-already-resolved")
 
 	// A note round trips as a string.
 	id2 := f.openCase(t, "ord-2-line-1", "SIM1", 0)
-	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id2+"/resolve",
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id2+"/resolutions",
 		`{"resolutionCode":"WORK_COMPLETED","rootCause":"OPERATOR_UNAVAILABLE","note":"moved by hand"}`, http.StatusOK, idemKey("k-rs4")), &got)
 	raw2 := mustCall(t, f.router(), http.MethodGet, "/exceptions/"+id2, "", http.StatusOK, nil).Body.String()
 	if !strings.Contains(raw2, `"note":"moved by hand"`) {
@@ -221,26 +235,27 @@ func TestResolveExceptionValidation(t *testing.T) {
 	id := f.openCase(t, "ord-1-line-1", "SIM1", 0)
 	h := f.router()
 
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/resolve", `{"resolutionCode":"","rootCause":"X"}`, http.StatusBadRequest, idemKey("k1")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/resolutions", `{"resolutionCode":"","rootCause":"X"}`, http.StatusBadRequest, idemKey("k1")),
 		http.StatusBadRequest, "invalid-resolution")
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/resolve", `{"resolutionCode":"WORK_COMPLETED","rootCause":"not a code"}`, http.StatusBadRequest, idemKey("k2")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/resolutions", `{"resolutionCode":"WORK_COMPLETED","rootCause":"not a code"}`, http.StatusBadRequest, idemKey("k2")),
 		http.StatusBadRequest, "invalid-resolution")
-	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/resolve", `{"resolutionCode":"WORK_COMPLETED"}`, http.StatusBadRequest, idemKey("k3")),
+	wantProblem(t, mustCall(t, h, http.MethodPost, "/exceptions/"+id+"/resolutions", `{"resolutionCode":"WORK_COMPLETED"}`, http.StatusBadRequest, idemKey("k3")),
 		http.StatusBadRequest, "invalid-resolution")
 }
 
 func TestListExceptionPolicies(t *testing.T) {
 	f := newFixture(t)
 	rec := mustCall(t, f.router(), http.MethodGet, "/exception-policies", "", http.StatusOK, nil)
-	if strings.TrimSpace(rec.Body.String()) != "[]" {
-		t.Fatalf("empty list = %q, want []", rec.Body.String())
+	if strings.TrimSpace(rec.Body.String()) != `{"items":[]}` {
+		t.Fatalf("empty list = %q, want {\"items\":[]}", rec.Body.String())
 	}
 
 	f.declarePolicy(t, testSourceType, 30)
 	f.declarePolicy(t, "com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached", 15)
-	var got []policyDTO
-	decodeBody(t, mustCall(t, f.router(), http.MethodGet, "/exception-policies", "", http.StatusOK, nil), &got)
-	if len(got) != 2 || got[0].SourceType != testSourceType || got[1].SourceType != "com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached" {
+	var gotPage policyPage
+	decodeBody(t, mustCall(t, f.router(), http.MethodGet, "/exception-policies", "", http.StatusOK, nil), &gotPage)
+	got := gotPage.Items
+	if len(got) != 2 || gotPage.NextCursor != "" || got[0].SourceType != testSourceType || got[1].SourceType != "com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached" {
 		t.Fatalf("policies = %+v, want both, ordered by source type", got)
 	}
 	if got[0].Version != 1 || got[0].Severity != "HIGH" || got[0].SLAMinutes != 30 || got[0].AutoResolve != nil {
@@ -292,7 +307,8 @@ func TestDeclareExceptionPolicyProblems(t *testing.T) {
 
 func TestPostExceptionsIsA405ExplainingItself(t *testing.T) {
 	f := newFixture(t)
-	// No Idempotency-Key needed: a 405 is answered before idempotency runs.
+	// This fixture wires no idempotency middleware, so no key is needed here;
+	// TestIdempotencyWrapsTheNoCreate405 covers the keyed route.
 	rec := mustCall(t, f.router(), http.MethodPost, "/exceptions", `{}`, http.StatusMethodNotAllowed, nil)
 	wantProblem(t, rec, http.StatusMethodNotAllowed, "method-not-allowed")
 	if !strings.Contains(rec.Body.String(), "no POST /exceptions") {

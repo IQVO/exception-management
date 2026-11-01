@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-	"unicode/utf8"
 
 	"github.com/claudioed/exception-management/internal/application/ports"
 	"github.com/claudioed/exception-management/internal/application/repository"
@@ -21,6 +20,10 @@ import (
 // IdempotencyKeyHeader is the request header a caller supplies on every POST
 // and PUT wrapped by Idempotency.Middleware.
 const IdempotencyKeyHeader = "Idempotency-Key"
+
+// IdempotencyReplayedHeader is the response header ("true") of every replayed
+// answer, and only of a replay: the first execution never carries it.
+const IdempotencyReplayedHeader = "Idempotency-Replayed"
 
 // maxIdempotencyKeyLen is the OpenAPI maxLength of the key.
 const maxIdempotencyKeyLen = 128
@@ -36,8 +39,9 @@ var (
 // imports no sibling adapter. The argument in short:
 //
 //   - A key that already has a stored answer replays it (same fingerprint:
-//     method, path and body) or is 409 idempotency-key-reused (different
-//     fingerprint). Nothing runs.
+//     method, path and SHA-256 of the body) with the response header
+//     Idempotency-Replayed: true, or is 409 idempotency-key-reused
+//     (different fingerprint). Nothing runs.
 //   - A new key runs the handler INSIDE one unit of work. A 2xx answer is
 //     saved in that same transaction, so the effects, their outbox rows and
 //     the stored answer commit or roll back together.
@@ -90,19 +94,33 @@ func (m *Idempotency) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// requestKey reads the Idempotency-Key; a missing or over-long key is
-// answered 400 idempotency-key-required and reported as not ok.
+// requestKey reads the Idempotency-Key; a missing key is answered 400
+// idempotency-key-required and a key that is longer than 128 characters or
+// not printable ASCII 400 idempotency-key-invalid, both reported as not ok.
 func requestKey(w http.ResponseWriter, r *http.Request) (string, bool) {
 	key := r.Header.Get(IdempotencyKeyHeader)
 	if key == "" {
 		writeProblem(w, r, idempotencyKeyRequired, "send an Idempotency-Key header with a unique value per logical request")
 		return "", false
 	}
-	if utf8.RuneCountInString(key) > maxIdempotencyKeyLen {
-		writeProblem(w, r, idempotencyKeyRequired, "the Idempotency-Key header must be 1 to 128 characters")
+	if !printableKey(key) {
+		writeProblem(w, r, idempotencyKeyInvalid, "the Idempotency-Key header must be 1 to 128 printable ASCII characters")
 		return "", false
 	}
 	return key, true
+}
+
+// printableKey reports whether key is 1 to 128 printable ASCII characters.
+func printableKey(key string) bool {
+	if len(key) > maxIdempotencyKeyLen {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		if key[i] < 0x20 || key[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 // bufferBody reads the body once so it can be fingerprinted and still be
@@ -268,10 +286,11 @@ func (m *Idempotency) finishRejected(w http.ResponseWriter, r *http.Request, key
 }
 
 // replay answers a request whose key already has a stored answer: that
-// answer when the fingerprint matches, 409 when it does not.
+// answer (marked Idempotency-Replayed: true) when the fingerprint matches,
+// 409 when it does not.
 func replay(w http.ResponseWriter, r *http.Request, rec repository.IdempotencyRecord, fp string) {
 	if rec.Fingerprint != fp {
-		writeProblem(w, r, idempotencyKeyReused, "the Idempotency-Key was used with a different request body")
+		writeProblem(w, r, idempotencyKeyReused, "the Idempotency-Key was used with a different request (method, path or body)")
 		return
 	}
 	var answer storedAnswer
@@ -284,6 +303,7 @@ func replay(w http.ResponseWriter, r *http.Request, rec repository.IdempotencyRe
 			w.Header().Add(k, v)
 		}
 	}
+	w.Header().Set(IdempotencyReplayedHeader, "true")
 	w.WriteHeader(rec.Status)
 	_, _ = w.Write(answer.Body)
 }

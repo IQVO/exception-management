@@ -145,35 +145,6 @@ func (r *CaseRepo) ListOpen(ctx context.Context, queue, siteID, sourceType strin
 	return out, rows.Err()
 }
 
-// List implements ports.ExceptionCaseRepo: every case whose status matches
-// status ("" = every status, resolved cases included — resolve activity is
-// part of the record, the GET /exceptions contract), narrowed by the
-// non-blank filters, NEWEST opened first (opened_at descending, then case id
-// descending) — the order the in-memory adapter returns too.
-func (r *CaseRepo) List(ctx context.Context, status, queue, siteID, sourceType string) ([]*exceptioncase.Case, error) {
-	rows, err := queryFor(ctx, r.pool).Query(ctx, `
-		SELECT `+caseColumns+` FROM exception_cases
-		WHERE ($1 = '' OR status = $1)
-		  AND ($2 = '' OR queue = $2)
-		  AND ($3 = '' OR site_id = $3)
-		  AND ($4 = '' OR source_type = $4)
-		ORDER BY opened_at DESC, case_id DESC
-	`, status, queue, siteID, sourceType)
-	if err != nil {
-		return nil, fmt.Errorf("list exception cases: %w", err)
-	}
-	defer rows.Close()
-	out := []*exceptioncase.Case{}
-	for rows.Next() {
-		c, err := scanCase(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
-}
-
 func caseArgs(s exceptioncase.Snapshot, audit []byte) []any {
 	return []any{
 		s.ID, s.Key.SourceType, s.Key.SourceSubject, s.Key.SiteID,

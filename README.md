@@ -68,7 +68,7 @@ from `warehouse-harness-template` (v4); guides in `.claude/rules/`, sensors in
   consumed fact; a repeated fact touches the open case instead of opening
   another.
 - Operators triage, assign and resolve cases over REST
-  (`/exceptions/{caseId}/triage|assign|resolve`); every transition records
+  (`/exceptions/{caseId}/triage-decisions|assignments|resolutions`); every transition records
   its actor.
 - A versioned `ExceptionPolicy` per source type sets severity, queue, SLA
   and a declarative auto-resolve rule (for example `OrderRepromised` closes
@@ -289,24 +289,41 @@ below is declared at the same path in `apis/openapi.yaml`.
 
 | Method | Path | Purpose | Success |
 |---|---|---|---|
-| `GET` | `/exceptions?status=&queue=&site=&sourceType=` | List cases, newest first (empty is `200 []`) | `200` |
-| `POST` | `/exceptions` | **deliberately absent**: permanent `405` with `Allow: GET` — every case opens from a consumed fact (ADR 0001) | `405` |
+| `GET` | `/exceptions?status=&queue=&site=&sourceType=&limit=&cursor=` | List cases, newest first, one keyset page (`{items, nextCursor}`; empty is `200 {"items":[]}`) | `200` |
+| `POST` | `/exceptions` | **deliberately absent**: permanent `405` with `Allow: GET` — every case opens from a consumed fact (ADR 0001); keyed like every `POST` (no key is `400` first, the `405` replays) | `405` |
 | `GET` | `/exceptions/{caseId}` | Get one case | `200` |
-| `POST` | `/exceptions/{caseId}/triage` | TriageException (records its actor) | `201` + `Location` |
-| `POST` | `/exceptions/{caseId}/assign` | AssignException | `201` + `Location` |
-| `POST` | `/exceptions/{caseId}/resolve` | ResolveException (root cause) | `201` + `Location` |
-| `GET` | `/exception-policies` | List the declared policies | `200` |
-| `PUT` | `/exception-policies/{sourceType}` | DeclareExceptionPolicy (versioned) | `200` |
+| `POST` | `/exceptions/{caseId}/triage-decisions` | TriageException (records its actor) | `200` |
+| `POST` | `/exceptions/{caseId}/assignments` | AssignException | `200` |
+| `POST` | `/exceptions/{caseId}/resolutions` | ResolveException (root cause) | `200` |
+| `GET` | `/exception-policies?limit=&cursor=` | List the declared policies, ordered by source type, one keyset page (`{items, nextCursor}`) | `200` |
+| `PUT` | `/exception-policies/{sourceType}` | DeclareExceptionPolicy (versioned) | `201` |
 | `GET` | `/healthz` / `/readyz` / `/metrics` | Liveness / readiness / the presence gauge | `200` |
 
 ### Idempotency
 
-The four operator write routes — `triage`, `assign`, `resolve` and
-`PUT /exception-policies/{sourceType}` — require a caller-supplied
-`Idempotency-Key` header (Postgres-backed idempotency pool, migration
-`0002_idempotency_keys`). A retry with the same key and the same body
-replays the original response verbatim; the same key with a different body
-is rejected `422`; a missing header is `400`.
+Every `POST` (`/exceptions` included) and the `PUT` of the policy surface
+require a caller-supplied `Idempotency-Key` header (1–128 printable ASCII
+characters; Postgres-backed idempotency pool, migration
+`0002_idempotency_keys`; the key row, the case change and the outbox rows
+commit in one transaction). A retry with the same key and the same request
+(method, path and body) replays the original response verbatim and adds
+`Idempotency-Replayed: true`; the same key with a different request is
+`409` `idempotency-key-reused`; a missing header is `400`
+`idempotency-key-required` (`idempotency-key-invalid` when it is over-long
+or not printable ASCII). A `4xx` answer is stored and replayed; a `5xx` is
+rolled back and never stored.
+
+### Pagination
+
+`GET /exceptions` and `GET /exception-policies` answer
+`{"items": [...], "nextCursor": "<opaque>"}`: `limit` (1–500, default 100)
+and `cursor` (the previous page's `nextCursor`; absent on the first page),
+keyset-ordered by `(opened_at, case_id)` descending for cases and by source
+type for policies. Repeat the filters on every page request; an invalid
+`limit` is `400 invalid-limit`, an undecodable `cursor` `400 invalid-cursor`
+and any undeclared query parameter (`after`, `offset`, …) `400
+unknown-query-parameter`. The MCP tools and the A2A skills keep their own
+schemas and still return every row (they walk the pages in-process).
 
 `apis/openapi.yaml` (OpenAPI 3.0.3) documents every route with full schemas
 and a shared `Problem` component; `apis/asyncapi.yaml` (AsyncAPI 2.6)
