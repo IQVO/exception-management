@@ -36,6 +36,22 @@ Kafka and Postgres integration tests use **testcontainers only** — they boot t
 leader; nothing reads `localhost:9092`, nothing skips on a missing env var, and every Kafka read
 is bounded by a context deadline.
 
+## Repository contract suites
+
+`internal/testing/repocontract` holds one behavioural contract per outbound port. The in-memory
+doubles (`internal/adapters/outbound/memory`, in the unit run) and the Postgres adapters (under
+`-tags=integration`, on a testcontainers Postgres) call the **same** cases, so what the BDD suite
+shows over memory is what production does over Postgres. Four suites exist: `CaseRepo`,
+`PolicyRepo`, `IdempotencyStore` and `ProcessedEvents`.
+
+The `PolicyRepo` suite covers an unknown source type, the version-1 round trip (with and without
+the auto-resolve rule), a redeclaration becoming the latest version, a same-version save losing
+the declare race, and the list of latest versions. Its not-found case reads the sentinel source
+type `com.warehouse.wes.fulfillment-execution.task.NeverSeen`. That string only has to look like a
+CloudEvents type and never match a declared policy; it is a lookup-miss fixture, **not an event
+the service consumes or publishes**. The consumed and published types are in
+[Domain events](/docs/ddd/domain-events).
+
 ## Acceptance (BDD) and architecture fitness
 
 - `make bdd` — godog/Gherkin acceptance over `features/`, the operator-visible lifecycle
