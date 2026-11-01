@@ -10,8 +10,9 @@ info:
     return); this API is where operators triage, assign and resolve those
     cases, and where the handling policy per source type is declared.
 
-    There is deliberately **no `POST /exceptions`**: a case is always a
-    consumed fact, and a repeated fact touches the open case (occurrence
+    There is deliberately **no case creation over REST** (`POST /exceptions`
+    is always a keyed `405`): a case is always a consumed fact, and a
+    repeated fact touches the open case (occurrence
     count, `lastSeenAt`) instead of opening another. `status` runs
     `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`; `RESOLVED` requires a
     resolution code and is terminal; `escalated` is a flag set by the SLA
@@ -19,7 +20,10 @@ info:
 
     Events are published as CloudEvents on
     `warehouse.exception-management.events` through a transactional outbox
-    (see `apis/asyncapi.yaml`, ADR 0004). Errors are RFC 7807 problem
+    (see `apis/asyncapi.yaml`, ADR 0004). Every `POST` is idempotent: send an
+    `Idempotency-Key`; a replay carries `Idempotency-Replayed: true`. Lists
+    are keyset-paged (`limit`, `cursor`) and answer `{items, nextCursor}`.
+    Errors are RFC 7807 problem
     documents with
     `type = https://errors.exception-management.warehouse-systems.dev/<slug>`.
     There is no authentication layer (fleet decision 2026-09-11).
@@ -47,13 +51,17 @@ paths:
       operationId: listExceptions
       summary: List exception cases
       description: |
-        Lists cases, newest first. An empty result is `200` with `[]`, never
-        a 404. `status`, `queue`, `site` and `sourceType` narrow the list;
+        Lists cases, newest opened first, one page at a time (`limit`,
+        `cursor`; keyset on opened-at then case id). An empty result is `200`
+        with `{"items": []}`, never a 404. `status`, `queue`, `site` and
+        `sourceType` narrow the list and are repeated on every page request;
         `sourceType` is the full CloudEvents type of the source fact. Without
         a `status` filter the list returns every open AND resolved case
         matching the other filters (resolve activity is part of the record).
       tags: [Exceptions]
       parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
         - name: status
           in: query
           description: Only cases in this status.
@@ -76,44 +84,44 @@ paths:
             type: string
       responses:
         "200":
-          description: The matching cases (an empty list, never a 404).
+          description: One page of the matching cases (an empty page, never a 404).
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ExceptionCase"
+                $ref: "#/components/schemas/ExceptionCasePage"
               example:
-                - caseId: case-1d2e3f4a-5b6c-4789-9abc-def012345678
-                  dedupKey:
-                    sourceType: com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
-                    sourceSubject: task-8a1f
-                    siteId: null
-                  status: OPEN
-                  severity: HIGH
-                  queue: cps-front
-                  occurrenceCount: 3
-                  escalated: false
-                  openedAt: "2026-10-21T09:00:05Z"
-                  lastSeenAt: "2026-10-21T09:20:05Z"
-                  slaDueAt: "2026-10-21T09:30:05Z"
-                  sourceEventId: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b"
-                  sourcePayload:
-                    task_id: task-8a1f
-                    order_ref: wu-8a1f
-                    task_type: PICK
-                    cpt: "2026-09-30T14:55:00Z"
-                  auditTrail:
-                    - action: OPENED
-                      actor: system
-                      at: "2026-10-21T09:00:05Z"
-                    - action: TOUCHED
-                      actor: system
-                      at: "2026-10-21T09:10:05Z"
-                    - action: TOUCHED
-                      actor: system
-                      at: "2026-10-21T09:20:05Z"
-                  version: 1
+                items:
+                  - caseId: case-1d2e3f4a-5b6c-4789-9abc-def012345678
+                    dedupKey:
+                      sourceType: com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
+                      sourceSubject: task-8a1f
+                      siteId: null
+                    status: OPEN
+                    severity: HIGH
+                    queue: cps-front
+                    occurrenceCount: 3
+                    escalated: false
+                    openedAt: "2026-10-21T09:00:05Z"
+                    lastSeenAt: "2026-10-21T09:20:05Z"
+                    slaDueAt: "2026-10-21T09:30:05Z"
+                    sourceEventId: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b"
+                    sourcePayload:
+                      task_id: task-8a1f
+                      order_ref: wu-8a1f
+                      task_type: PICK
+                      cpt: "2026-09-30T14:55:00Z"
+                    auditTrail:
+                      - action: OPENED
+                        actor: system
+                        at: "2026-10-21T09:00:05Z"
+                      - action: TOUCHED
+                        actor: system
+                        at: "2026-10-21T09:10:05Z"
+                      - action: TOUCHED
+                        actor: system
+                        at: "2026-10-21T09:20:05Z"
+                    version: 1
+                nextCursor: eyJzIjoiMjAyNi0xMC0yMVQwOTowMDowNVoiLCJpIjoiY2FzZS0xZDJlM2Y0YS01YjZjLTQ3ODktOWFiYy1kZWYwMTIzNDU2NzgifQ
         "400":
           $ref: "#/components/responses/BadRequest"
         "500":
@@ -125,12 +133,26 @@ paths:
         There is deliberately **no `POST /exceptions`**: every case opens
         from a consumed fact (ADR 0001), and a repeated fact touches the open
         case (occurrence count, `lastSeenAt`) instead of opening another.
-        The router answers `405 method-not-allowed` naming `GET` as the
-        allowed method, and no `Idempotency-Key` is demanded first.
+        Like every `POST` of the fleet it sits behind the idempotency
+        middleware: the `Idempotency-Key` is demanded first (400
+        `idempotency-key-required` when absent), then the router answers
+        `405 method-not-allowed` naming `GET` as the allowed method. The 405
+        is a deterministic answer and is stored: the same key and request
+        replays it with `Idempotency-Replayed: true`, the same key with a
+        different request is 409 `idempotency-key-reused`.
       tags: [Exceptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "405":
           description: Case creation does not exist; every case comes from a consumed fact.
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           content:
             application/problem+json:
               schema:
@@ -167,7 +189,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /exceptions/{caseId}/triage:
+  /exceptions/{caseId}/triage-decisions:
     parameters:
       - $ref: "#/components/parameters/CaseId"
     post:
@@ -176,8 +198,9 @@ paths:
       description: |
         Sets or changes the severity and queue of a case that is not yet
         resolved, and moves an `OPEN` case to `TRIAGED`. Requires an
-        `Idempotency-Key`; replaying the same key and body returns the stored
-        response. Publishes `ExceptionTriaged`.
+        `Idempotency-Key`; replaying the same key and request returns the
+        stored response with `Idempotency-Replayed: true`. Publishes
+        `ExceptionTriaged`.
       tags: [Exceptions]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -193,6 +216,9 @@ paths:
       responses:
         "200":
           description: The case is now triaged.
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           content:
             application/json:
               schema:
@@ -206,7 +232,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /exceptions/{caseId}/assign:
+  /exceptions/{caseId}/assignments:
     parameters:
       - $ref: "#/components/parameters/CaseId"
     post:
@@ -230,6 +256,9 @@ paths:
       responses:
         "200":
           description: The case is now assigned.
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           content:
             application/json:
               schema:
@@ -243,7 +272,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /exceptions/{caseId}/resolve:
+  /exceptions/{caseId}/resolutions:
     parameters:
       - $ref: "#/components/parameters/CaseId"
     post:
@@ -270,6 +299,9 @@ paths:
       responses:
         "200":
           description: The case is resolved (terminal).
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           content:
             application/json:
               schema:
@@ -289,27 +321,33 @@ paths:
       summary: List the handling policies
       description: |
         Lists the current policy version of every declared source type,
-        ordered by source type. An empty list is `200` with `[]`.
+        ordered by source type, one page at a time (`limit`, `cursor`; keyset
+        on source type). An empty result is `200` with `{"items": []}`.
       tags: [Exception policies]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
-          description: The declared policies.
+          description: One page of the declared policies.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ExceptionPolicy"
+                $ref: "#/components/schemas/ExceptionPolicyPage"
               example:
-                - sourceType: com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
-                  version: 1
-                  severity: HIGH
-                  queue: cps-front
-                  slaMinutes: 30
-                  autoResolve:
-                    onType: com.warehouse.wes.order-management.order.OrderRepromised
-                    withinMinutes: 60
-                  declaredAt: "2026-10-21T08:00:00Z"
+                items:
+                  - sourceType: com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed
+                    version: 1
+                    severity: HIGH
+                    queue: cps-front
+                    slaMinutes: 30
+                    autoResolve:
+                      onType: com.warehouse.wes.order-management.order.OrderRepromised
+                      withinMinutes: 60
+                    declaredAt: "2026-10-21T08:00:00Z"
+                nextCursor: eyJzIjoiY29tLndhcmVob3VzZS53ZXMuZnVsZmlsbG1lbnQtZXhlY3V0aW9uLnRhc2suVGFza0NQVE1pc3NlZCIsImkiOiJjb20ud2FyZWhvdXNlLndlcy5mdWxmaWxsbWVudC1leGVjdXRpb24udGFzay5UYXNrQ1BUTWlzc2VkIn0
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -452,15 +490,48 @@ components:
       in: header
       required: true
       description: |
-        Caller-generated unique key (a UUID per logical submit) that makes a
-        retried request safe. Required on every POST and PUT; answered with
-        400 `idempotency-key-required` when absent. A replay with the same
-        key and the same body returns the stored response; the same key with
-        a different body is a 409 `idempotency-key-reused`.
+        Caller-generated unique key (a UUID per logical submit; a retry
+        reuses it) that makes a retried request safe. Required on every POST
+        (a PUT accepts it too); answered with 400 `idempotency-key-required`
+        when absent and 400 `idempotency-key-invalid` when it is longer than
+        128 characters or not printable ASCII. A replay with the same key and
+        the same request (method, path and body) returns the stored response
+        with the header `Idempotency-Replayed: true`; the same key with a
+        different request is a 409 `idempotency-key-reused`.
       schema:
         type: string
         minLength: 1
         maxLength: 128
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size, 1 to 500 (default 100); anything else is 400 `invalid-limit`.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Opaque page token, copied from the previous page's `nextCursor`;
+        absent for the first page. A value that does not decode is 400
+        `invalid-cursor`. Repeat the filters on every page request.
+      schema:
+        type: string
+
+  headers:
+    IdempotencyReplayed:
+      description: >-
+        `true` when this response is the stored answer of an earlier request
+        with the same `Idempotency-Key` and the same method, path and body
+        (the handler did not run again). Absent on the first execution.
+      schema:
+        type: string
+        enum: ["true"]
 
   responses:
     BadRequest:
@@ -477,7 +548,7 @@ components:
                 title: Malformed request body
                 status: 400
                 detail: request body is not valid JSON for this operation
-                instance: /exceptions/case-1/resolve
+                instance: /exceptions/case-1/resolutions
             invalidSeverity:
               summary: Unknown severity
               value:
@@ -485,7 +556,7 @@ components:
                 title: Severity is invalid
                 status: 400
                 detail: "severity must be one of LOW, MEDIUM, HIGH, CRITICAL"
-                instance: /exceptions/case-1/triage
+                instance: /exceptions/case-1/triage-decisions
             invalidQueue:
               summary: Blank queue
               value:
@@ -493,7 +564,7 @@ components:
                 title: Queue is invalid
                 status: 400
                 detail: queue must not be blank
-                instance: /exceptions/case-1/triage
+                instance: /exceptions/case-1/triage-decisions
             invalidAssignee:
               summary: Blank assignee
               value:
@@ -501,7 +572,7 @@ components:
                 title: Assignee is invalid
                 status: 400
                 detail: assignee must not be blank
-                instance: /exceptions/case-1/assign
+                instance: /exceptions/case-1/assignments
             invalidResolution:
               summary: Missing resolution code or root cause
               value:
@@ -509,7 +580,7 @@ components:
                 title: Resolution is invalid
                 status: 400
                 detail: resolutionCode and rootCause must not be blank
-                instance: /exceptions/case-1/resolve
+                instance: /exceptions/case-1/resolutions
             invalidPolicy:
               summary: Policy values out of range
               value:
@@ -549,7 +620,31 @@ components:
                 title: Idempotency-Key header is required
                 status: 400
                 detail: send an Idempotency-Key header with a unique value per logical request
-                instance: /exceptions/case-1/resolve
+                instance: /exceptions/case-1/resolutions
+            idempotencyKeyInvalid:
+              summary: Idempotency-Key longer than 128 characters or not printable ASCII
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/idempotency-key-invalid
+                title: Idempotency-Key header is invalid
+                status: 400
+                detail: the Idempotency-Key header must be 1 to 128 printable ASCII characters
+                instance: /exceptions/case-1/resolutions
+            invalidLimit:
+              summary: limit outside 1 to 500
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-limit
+                title: Limit is invalid
+                status: 400
+                detail: limit must be an integer between 1 and 500
+                instance: /exceptions
+            invalidCursor:
+              summary: cursor is not a page token
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-cursor
+                title: Cursor is invalid
+                status: 400
+                detail: cursor is not a valid page token
+                instance: /exceptions
     NotFound:
       description: No case has this id, or the path holds a NUL byte.
       content:
@@ -574,7 +669,7 @@ components:
                 detail: no such path
                 instance: /nope
     Conflict:
-      description: The case is in the wrong state for the command, or the Idempotency-Key was reused.
+      description: The case is in the wrong state for the command, another request changed it first, or the Idempotency-Key was already used with a different request (`idempotency-key-reused`).
       content:
         application/problem+json:
           schema:
@@ -587,15 +682,15 @@ components:
                 title: The case is already resolved
                 status: 409
                 detail: a resolved case accepts no further command
-                instance: /exceptions/case-1/resolve
+                instance: /exceptions/case-1/resolutions
             idempotencyKeyReused:
-              summary: The Idempotency-Key was used with a different body
+              summary: The Idempotency-Key was used with a different request
               value:
                 type: https://errors.exception-management.warehouse-systems.dev/idempotency-key-reused
                 title: Idempotency-Key was already used with a different request
                 status: 409
-                detail: the Idempotency-Key was used with a different request body
-                instance: /exceptions/case-1/resolve
+                detail: the Idempotency-Key was used with a different request (method, path or body)
+                instance: /exceptions/case-1/resolutions
             concurrentModification:
               summary: Another request changed the case between read and write
               value:
@@ -603,7 +698,7 @@ components:
                 title: The case was modified by another request; re-fetch the latest version and retry
                 status: 409
                 detail: re-fetch the case and retry the command
-                instance: /exceptions/case-1/triage
+                instance: /exceptions/case-1/triage-decisions
     InternalError:
       description: Unexpected server error.
       content:
@@ -775,6 +870,28 @@ components:
           description: One entry per transition, in order; every entry records its actor.
           items: { $ref: "#/components/schemas/AuditEntry" }
         version: { type: integer, format: int64, minimum: 1, description: "Starts at 1, +1 per accepted transition." }
+
+    ExceptionCasePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ExceptionCase" }
+        nextCursor:
+          type: string
+          description: Opaque token for the next page; absent on the last page.
+
+    ExceptionPolicyPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ExceptionPolicy" }
+        nextCursor:
+          type: string
+          description: Opaque token for the next page; absent on the last page.
 
     Problem:
       type: object
