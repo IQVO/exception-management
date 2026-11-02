@@ -31,6 +31,8 @@ type listOpenExceptionsInput struct {
 	Queue      string `json:"queue,omitempty" jsonschema:"keep only cases of this queue; omitted means every queue"`
 	SiteID     string `json:"site_id,omitempty" jsonschema:"keep only cases of this site; omitted means every site"`
 	SourceType string `json:"source_type,omitempty" jsonschema:"keep only cases opened by this CloudEvents source type; omitted means every source type"`
+	Limit      int    `json:"limit,omitempty" jsonschema:"page size, 1 to 500; omitted or 0 means 100"`
+	Cursor     string `json:"cursor,omitempty" jsonschema:"the opaque next_cursor returned by the previous page; omitted means the first page"`
 }
 
 type getExceptionInput struct {
@@ -98,7 +100,8 @@ type slaReportView struct {
 }
 
 type exceptionListView struct {
-	Items []caseView `json:"items"`
+	Items      []caseView `json:"items"`
+	NextCursor string     `json:"next_cursor,omitempty"`
 }
 
 type policyListView struct {
@@ -162,12 +165,12 @@ func toSLAReport(v views.SLAReport) slaReportView {
 // --- handlers -----------------------------------------------------------------
 
 func (d Deps) listOpenExceptions(ctx context.Context, in listOpenExceptionsInput) (exceptionListView, error) {
-	items, err := d.List.Execute(ctx, in.Status, in.Queue, in.SiteID, in.SourceType)
+	page, err := d.List.Paged(ctx, in.Status, in.Queue, in.SiteID, in.SourceType, in.Limit, in.Cursor)
 	if err != nil {
 		return exceptionListView{}, mapError(err)
 	}
-	out := exceptionListView{Items: make([]caseView, 0, len(items))}
-	for _, v := range items {
+	out := exceptionListView{Items: make([]caseView, 0, len(page.Items)), NextCursor: page.NextCursor}
+	for _, v := range page.Items {
 		out.Items = append(out.Items, toCase(v))
 	}
 	return out, nil
@@ -215,7 +218,7 @@ func (d Deps) registerTools(server *mcp.Server) {
 
 	addTool(server, &mcp.Tool{
 		Name: "list_open_exceptions",
-		Description: "List the exception cases of the warehouse, newest opened first, optionally narrowed by status " +
+		Description: "List the exception cases of the warehouse, newest opened first, one page at a time (limit, 1 to 500, omitted means 100; pass the returned next_cursor as cursor to get the next page — it is absent on the last page), optionally narrowed by status " +
 			"(OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike — resolve " +
 			"activity is part of the record), queue, site and/or the CloudEvents source type that opened them. Each " +
 			"case carries its dedup identity (source_type, source_subject, site_id), severity, queue, occurrence_count " +

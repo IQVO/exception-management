@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/claudioed/exception-management/internal/application/ports"
+	"github.com/claudioed/exception-management/internal/application/usecases"
 )
 
 // errorCatalogue names each typed error a read tool can meet with the same
@@ -19,6 +20,9 @@ var errorCatalogue = []struct {
 }{
 	// The miss of a named case (GET /exceptions/{caseId} -> case-not-found).
 	{ports.ErrNotFound, "case-not-found"},
+	// A limit or cursor the paged listing rejects (the REST adapter's 400
+	// invalid-limit / invalid-cursor problems).
+	{usecases.ErrInvalidListQuery, "invalid-query"},
 }
 
 // slugFor returns the REST slug of err; ok is false for an untyped error.
