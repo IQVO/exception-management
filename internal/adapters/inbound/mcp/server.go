@@ -37,16 +37,19 @@ const instructions = "Exception management of the warehouse (read-only): see the
 	"sits against its SLA clocks (breached, escalated, by severity and queue) with get_sla_report. Cases are " +
 	"deduplicated per source stream, so occurrence_count is how often the same exception happened. Nothing here " +
 	"changes data: triaging, assigning or resolving a case and declaring a policy are REST operations of " +
-	"exception-management."
+	"exception-management. The warehouse://exception-management/sla-report resource carries the same " +
+	"SLA report, and the triage_exception_caseload prompt is the operator SOP to start from."
 
-// NewServer builds the MCP server for this bounded context with every tool
-// registered.
+// NewServer builds the MCP server for this bounded context with every tool,
+// resource and prompt registered.
 func NewServer(deps Deps) *mcp.Server {
 	server := mcp.NewServer(
 		&mcp.Implementation{Name: serverName, Version: serverVersion},
 		&mcp.ServerOptions{Instructions: instructions},
 	)
 	deps.registerTools(server)
+	deps.registerResources(server)
+	deps.registerPrompts(server)
 	return server
 }
 
