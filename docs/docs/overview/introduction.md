@@ -68,3 +68,7 @@ field-level detail is on [Domain events](/docs/ddd/domain-events).
   [aggregate design canvas](/docs/ddd/aggregate-design-canvas) and the rest of the
   [DDD artifacts](/docs/ddd/ddd-artifacts).
 - Decisions, in order: the [ADR index](/docs/adr).
+
+:::note[Disclaimer]
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+:::
