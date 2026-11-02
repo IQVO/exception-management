@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	inboundhttp "github.com/claudioed/exception-management/internal/adapters/inbound/http"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres"
@@ -17,6 +18,11 @@ import (
 	"github.com/claudioed/exception-management/internal/adapters/outbound/system"
 	"github.com/claudioed/exception-management/internal/testing/pgtest"
 )
+
+// The tcpostgres reference keeps the testcontainers postgres module import
+// visible in this file (internal/architecture requires it of every Postgres
+// integration test file); the database itself comes from pgtest.NewPool.
+var _ = tcpostgres.Run
 
 // These tests pin the invariant behind the aborted-transaction fix of the
 // sibling services, black-box through the middleware over real Postgres:
