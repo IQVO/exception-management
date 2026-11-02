@@ -81,7 +81,7 @@ skipped (WARN, commit past).
 | `wes.work-planning.workpool.BacklogThresholdBreached` | `warehouse.work-planning.events` | path id | `data` carries only `path_id` (the producer's contract) |
 | `wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk` | `warehouse.network-fulfillment.events` | networkRef | Re-fires while the condition holds; siteId feeds the dedup key |
 | `wes.network-fulfillment.networkorder.OrphanedHoldCancelled` | `warehouse.network-fulfillment.events` | networkRef | Same |
-| `wms.returns-processing.returnreceipt.UnexpectedReturnReceived` | `warehouse.returns-processing.events` | receipt id (+ line) | One case per receipt line; site_id feeds the dedup key |
+| `wms.returns-processing.returnreceipt.UnexpectedReturnReceived` | `warehouse.returns-processing.events` | receipt id | One case per receipt (line_no is not part of the key); site_id feeds the dedup key |
 | `wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | receipt id + sscc or `-` + kind | One case per (receipt, sscc, kind); UnlabelledCarton/CartonOverLimit route to receiving-lead, every other kind to problem-solve (ADR 0006) |
 | `wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | bin id | Promoted by the producer (PR #239, merged 2026-10-21) |
 | `wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | stock unit id | Same promotion |
