@@ -44,7 +44,7 @@ func (s *Server) handleTriageException(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	c, err := s.Triage.Execute(r.Context(), id, severity, queue, wireActor)
+	c, err := s.Triage.Execute(r.Context(), id, severity, queue, actorFor(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -70,7 +70,7 @@ func (s *Server) handleAssignException(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, errInvalidAssignee)
 		return
 	}
-	c, err := s.Assign.Execute(r.Context(), id, assignee, wireActor)
+	c, err := s.Assign.Execute(r.Context(), id, assignee, actorFor(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -109,7 +109,7 @@ func (s *Server) handleResolveException(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	c, err := s.Resolve.Execute(r.Context(), id, code, rootCause, note, wireActor)
+	c, err := s.Resolve.Execute(r.Context(), id, code, rootCause, note, actorFor(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -146,7 +146,7 @@ func (s *Server) handleDeclarePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	in := usecases.PolicyDeclaration{
 		SourceType: sourceType, Severity: severity, Queue: queue,
-		SLAMinutes: *body.SLAMinutes, Actor: wireActor,
+		SLAMinutes: *body.SLAMinutes, Actor: systemActor,
 	}
 	if body.AutoResolve != nil {
 		// The contract bundles a broken autoResolve rule under

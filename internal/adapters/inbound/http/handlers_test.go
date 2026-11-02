@@ -139,12 +139,51 @@ func TestTriageException(t *testing.T) {
 	if got.Status != "TRIAGED" || got.Severity != "CRITICAL" || got.Queue != "cps-inbound" {
 		t.Fatalf("triaged = %+v", got)
 	}
-	// The command records its actor: the wire carries no operator identity
-	// (no auth layer, no header in the contract), so v1 records system.
+	// The command records its actor: with no X-Actor header the audit
+	// trail keeps recording system.
 	last := got.AuditTrail[len(got.AuditTrail)-1]
 	if last.Action != "TRIAGED" || last.Actor != "system" {
 		t.Fatalf("audit = %+v, want TRIAGED by system", last)
 	}
+}
+
+// TestCaseCommandsRecordTheXActorHeader covers the operator identity of the
+// optional X-Actor header on the three case commands: named on triage and
+// assign, absent falls back to system on resolve, and a NUL value is the
+// 400 invalid-actor problem.
+func TestCaseCommandsRecordTheXActorHeader(t *testing.T) {
+	f := newFixture(t)
+	f.declarePolicy(t, testSourceType, 30)
+	id := f.openCase(t, "ord-1-line-1", "SIM1", 0)
+
+	var triaged caseDTO
+	actorKey := func(k string) map[string]string {
+		return map[string]string{IdempotencyKeyHeader: k, "X-Actor": "op-jane"}
+	}
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/triage-decisions",
+		`{"severity":"HIGH","queue":"cps-inbound"}`, http.StatusOK, actorKey("k-actor-1")), &triaged)
+	if last := triaged.AuditTrail[len(triaged.AuditTrail)-1]; last.Actor != "op-jane" {
+		t.Fatalf("triage audit actor = %q, want op-jane", last.Actor)
+	}
+
+	var assigned caseDTO
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/assignments",
+		`{"assignee":"op-7"}`, http.StatusOK, actorKey("k-actor-2")), &assigned)
+	if last := assigned.AuditTrail[len(assigned.AuditTrail)-1]; last.Action != "ASSIGNED" || last.Actor != "op-jane" {
+		t.Fatalf("assign audit = %+v, want ASSIGNED by op-jane", last)
+	}
+
+	var resolved caseDTO
+	decodeBody(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/resolutions",
+		`{"resolutionCode":"WORK_COMPLETED","rootCause":"OPERATOR_UNAVAILABLE"}`, http.StatusOK, idemKey("k-actor-3")), &resolved)
+	if last := resolved.AuditTrail[len(resolved.AuditTrail)-1]; last.Action != "RESOLVED" || last.Actor != "system" {
+		t.Fatalf("resolve audit = %+v, want RESOLVED by system", last)
+	}
+
+	wantProblem(t, mustCall(t, f.router(), http.MethodPost, "/exceptions/"+id+"/resolutions",
+		`{"resolutionCode":"WORK_COMPLETED","rootCause":"OPERATOR_UNAVAILABLE"}`, http.StatusBadRequest,
+		map[string]string{IdempotencyKeyHeader: "k-actor-4", "X-Actor": "op-\x00"}),
+		http.StatusBadRequest, "invalid-actor")
 }
 
 func TestTriageExceptionProblems(t *testing.T) {

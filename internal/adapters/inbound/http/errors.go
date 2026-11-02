@@ -15,6 +15,7 @@ import (
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/exceptionpolicy"
+	"github.com/claudioed/exception-management/internal/domain/shared"
 )
 
 // problemBaseURI is the namespace of this service's RFC 7807 `type` URIs.
@@ -91,6 +92,8 @@ var (
 		"queue must not be blank"}
 	invalidAssigneeProblem = problem{http.StatusBadRequest, "invalid-assignee", "Assignee is invalid",
 		"assignee must not be blank"}
+	invalidActorProblem = problem{http.StatusBadRequest, "invalid-actor", "Actor is invalid",
+		"the X-Actor header must name the operator performing the command, non-blank with no NUL byte"}
 	invalidResolutionProblem = problem{http.StatusBadRequest, "invalid-resolution", "Resolution is invalid",
 		"resolutionCode and rootCause must not be blank"}
 	invalidPolicyProblem = problem{http.StatusBadRequest, "invalid-policy", "Policy is invalid",
@@ -129,6 +132,7 @@ var problemCatalogue = []struct {
 	{exceptioncase.ErrBlankQueue, invalidQueueProblem},
 	{exceptionpolicy.ErrBlankQueue, invalidQueueProblem},
 	{exceptioncase.ErrBlankAssignee, invalidAssigneeProblem},
+	{shared.ErrBlankActor, invalidActorProblem},
 	{exceptioncase.ErrBlankResolutionCode, invalidResolutionProblem},
 	{exceptioncase.ErrBlankRootCause, invalidResolutionProblem},
 	{exceptionpolicy.ErrInvalidSourceType, invalidSourceTypeProblem},

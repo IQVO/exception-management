@@ -8,11 +8,24 @@ import (
 	"github.com/claudioed/exception-management/internal/application/usecases"
 )
 
-// wireActor is the actor every REST command records. The contract carries
-// no operator identity (there is no auth layer, fleet decision 2026-09-11,
-// and no actor header in apis/openapi.yaml), so v1 records `system` — one of
-// the ADR 0002 actor kinds — and the assignee field carries ownership.
-const wireActor = "system"
+// systemActor is the actor a command records when the request names no
+// operator: one of the ADR 0002 actor kinds, and the pre-header behavior
+// (the assignee field carries ownership). Policy declaration always
+// records it.
+const systemActor = "system"
+
+// actorFor is the actor a case command records: the operator identity of
+// the request's optional X-Actor header, or `system` when the header is
+// absent or blank. It is a label for the audit trail, not authentication
+// (there is no auth layer, fleet decision 2026-09-11); the use cases
+// validate the name, so a header with a NUL byte is the 400 invalid-actor
+// problem.
+func actorFor(r *http.Request) string {
+	if v := r.Header.Get("X-Actor"); v != "" {
+		return v
+	}
+	return systemActor
+}
 
 // Server holds the use cases the handlers call.
 type Server struct {
