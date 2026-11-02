@@ -66,20 +66,20 @@ exactly once. The sweeper reports facts; it never blocks work.
 
 ### 4. `TriageException` (`commands.go`)
 
-`POST /exceptions/{caseId}/triage` with `{severity, queue}`: sets or
+`POST /exceptions/{caseId}/triage-decisions` with `{severity, queue}`: sets or
 changes severity and queue, records the operator as actor. Raises
 `ExceptionTriaged`. Rejected with `409 case-already-resolved` on a terminal
 case.
 
 ### 5. `AssignException`
 
-`POST /exceptions/{caseId}/assign` with `{assignee}`: gives the case an
+`POST /exceptions/{caseId}/assignments` with `{assignee}`: gives the case an
 owner; reassignment is allowed while unresolved. Raises
 `ExceptionAssigned`.
 
 ### 6. `ResolveException`
 
-`POST /exceptions/{caseId}/resolve` with `{resolutionCode, rootCause,
+`POST /exceptions/{caseId}/resolutions` with `{resolutionCode, rootCause,
 note?}`: the terminal transition. Raises `ExceptionResolved`. Any later
 command on the case is a `409 case-already-resolved` (`ErrCaseClosed`).
 
@@ -100,7 +100,10 @@ racing another writer of the same next version is
 (inherited from the guide's "open cases" view), the contract is: every case
 matching the filters, whatever its status, unless a `status` filter names
 one (resolve activity is part of the record). Filters: `status`, `queue`,
-`site`, `sourceType`. Also behind the `list_open_exceptions` MCP tool.
+`site`, `sourceType`. REST answers one keyset page, `{items, nextCursor}`
+(`limit` 1–500, default 100, ordered by opened-at then case id, newest first);
+the use case's `Page` serves it and its `Execute` walks every page for the
+`list_open_exceptions` MCP tool and the A2A skill, which return complete data.
 
 ### 9. `GetException`
 
@@ -112,7 +115,8 @@ when it closed itself) and the audit trail. Also behind `get_exception`.
 ### 10. `ListExceptionPolicies`
 
 `GET /exception-policies` — the latest version per source type, ordered by
-source type. Also behind `get_exception_policies`.
+source type, one keyset page at a time (`{items, nextCursor}`). Its `Execute`
+walks every page for `get_exception_policies` and the A2A skill.
 
 ### 11. `GetSLAReport`
 

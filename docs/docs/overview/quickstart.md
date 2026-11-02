@@ -74,8 +74,8 @@ EOF
 
 ```bash
 curl -s 'localhost:8080/exceptions?status=OPEN' | jq '.items[0] | {case_id, source_subject, severity, queue, occurrence_count, sla_due_at}'
-curl -s -X POST localhost:8080/exceptions/<caseId>/assign  -H 'Content-Type: application/json' -H 'Idempotency-Key: a-1' -d '{"assignee":"jamie"}'
-curl -s -X POST localhost:8080/exceptions/<caseId>/resolve -H 'Content-Type: application/json' -H 'Idempotency-Key: r-1' -d '{"resolutionCode":"CPT_REPROMISED","rootCause":"CARRIER_DELAY","note":"carrier picked up late"}'
+curl -s -X POST localhost:8080/exceptions/<caseId>/assignments  -H 'Content-Type: application/json' -H 'Idempotency-Key: a-1' -d '{"assignee":"jamie"}'
+curl -s -X POST localhost:8080/exceptions/<caseId>/resolutions -H 'Content-Type: application/json' -H 'Idempotency-Key: r-1' -d '{"resolutionCode":"CPT_REPROMISED","rootCause":"CARRIER_DELAY","note":"carrier picked up late"}'
 ```
 
 Reproduce the same fact (change only the CloudEvents `id`) — the case stays one:

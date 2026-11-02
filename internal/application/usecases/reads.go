@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/claudioed/exception-management/internal/application/ports"
+	"github.com/claudioed/exception-management/internal/application/repository"
 	"github.com/claudioed/exception-management/internal/application/views"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/exceptionpolicy"
@@ -18,10 +19,16 @@ type ListOpenExceptions struct {
 	Cases ports.ExceptionCaseRepo
 }
 
-// Execute returns the matching cases as read views (never aggregate
-// pointers), newest opened first.
-func (uc *ListOpenExceptions) Execute(ctx context.Context, status, queue, siteID, sourceType string) ([]views.CaseView, error) {
-	matching, err := uc.Cases.List(ctx, status, queue, siteID, sourceType)
+// ListPageSize is the page size the in-process readers (the MCP tool and the
+// A2A skill) walk the listing with: the REST maximum.
+const ListPageSize = 500
+
+// Page returns at most limit matching cases as read views (never aggregate
+// pointers), newest opened first, strictly after the keyset position (nil =
+// the first page). The REST adapter asks for limit+1 rows to learn whether
+// another page exists.
+func (uc *ListOpenExceptions) Page(ctx context.Context, f repository.CaseFilter, after *repository.CaseAfter, limit int) ([]views.CaseView, error) {
+	matching, err := uc.Cases.ListPage(ctx, f, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -30,6 +37,27 @@ func (uc *ListOpenExceptions) Execute(ctx context.Context, status, queue, siteID
 		out = append(out, CaseView(c))
 	}
 	return out, nil
+}
+
+// Execute returns EVERY matching case, newest opened first: it walks the
+// keyset pages until a short one, so the MCP tool and the A2A skill (which
+// keep their own, unpaged tool schemas) still answer complete data.
+func (uc *ListOpenExceptions) Execute(ctx context.Context, status, queue, siteID, sourceType string) ([]views.CaseView, error) {
+	f := repository.CaseFilter{Status: status, Queue: queue, SiteID: siteID, SourceType: sourceType}
+	out := []views.CaseView{}
+	var after *repository.CaseAfter
+	for {
+		rows, err := uc.Page(ctx, f, after, ListPageSize)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+		if len(rows) < ListPageSize {
+			return out, nil
+		}
+		last := rows[len(rows)-1]
+		after = &repository.CaseAfter{OpenedAt: last.OpenedAt, ID: last.ID}
+	}
 }
 
 // GetException serves one case by id (ports.ErrNotFound -> HTTP 404).
@@ -123,9 +151,12 @@ type ListExceptionPolicies struct {
 	Policies ports.ExceptionPolicyRepo
 }
 
-// Execute returns the policy views (never aggregate pointers).
-func (uc *ListExceptionPolicies) Execute(ctx context.Context) ([]views.PolicyView, error) {
-	declared, err := uc.Policies.List(ctx)
+// Page returns at most limit policy views (never aggregate pointers),
+// ordered by source type, strictly after the source type `after` ("" = the
+// first page). The REST adapter asks for limit+1 rows to learn whether
+// another page exists.
+func (uc *ListExceptionPolicies) Page(ctx context.Context, after string, limit int) ([]views.PolicyView, error) {
+	declared, err := uc.Policies.ListPage(ctx, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -134,4 +165,23 @@ func (uc *ListExceptionPolicies) Execute(ctx context.Context) ([]views.PolicyVie
 		out = append(out, PolicyView(p))
 	}
 	return out, nil
+}
+
+// Execute returns EVERY declared policy, ordered by source type: it walks
+// the keyset pages until a short one, so the MCP tool and the A2A skill
+// still answer complete data.
+func (uc *ListExceptionPolicies) Execute(ctx context.Context) ([]views.PolicyView, error) {
+	out := []views.PolicyView{}
+	after := ""
+	for {
+		rows, err := uc.Page(ctx, after, ListPageSize)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+		if len(rows) < ListPageSize {
+			return out, nil
+		}
+		after = rows[len(rows)-1].SourceType
+	}
 }

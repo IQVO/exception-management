@@ -21,3 +21,4 @@ section.
 | [0005](/docs/adr/0005-outbox-relay-attempt-cap-and-dlq) | outbox relay — delete-on-publish, attempt cap, dead-letter topic | Accepted (2026-10-21) |
 | [0006](/docs/adr/0006-carton-discrepancy-consumer-and-routing) | carton-discrepancy consumer and routing | Accepted (2026-10-24) |
 | [0007](/docs/adr/0007-a2a-inbound-adapter) | A2A inbound adapter (read-only third driving adapter) | Accepted (2026-10-29) |
+| [0008](/docs/adr/0008-adopt-the-fleet-rest-api-guideline) | Adopt the fleet REST API guideline | Accepted (2026-11-01) |

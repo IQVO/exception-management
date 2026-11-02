@@ -19,6 +19,7 @@ import (
 
 	"github.com/claudioed/exception-management/internal/adapters/outbound/memory"
 	"github.com/claudioed/exception-management/internal/application/ports"
+	"github.com/claudioed/exception-management/internal/application/repository"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 )
@@ -537,7 +538,7 @@ func (failingCases) FindByID(context.Context, string) (*exceptioncase.Case, erro
 	return nil, errInfra
 }
 
-func (failingCases) List(context.Context, string, string, string, string) ([]*exceptioncase.Case, error) {
+func (failingCases) ListPage(context.Context, repository.CaseFilter, *repository.CaseAfter, int) ([]*exceptioncase.Case, error) {
 	return nil, errInfra
 }
 

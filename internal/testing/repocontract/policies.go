@@ -22,6 +22,7 @@ func PolicyRepo(t *testing.T, newRepo func(t *testing.T) ports.ExceptionPolicyRe
 		"a redeclaration becomes the latest version": policyLatest,
 		"a same-version save is a lost declare race": policySameVersionConflict,
 		"list returns every latest version by type":  policyList,
+		"list pages walk every policy once":          policyListPages,
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) { fn(t, newRepo(t)) })
@@ -117,8 +118,7 @@ func policyList(t *testing.T, r ports.ExceptionPolicyRepo) {
 	must(t, r.Save(bg, declare(t, SrcType, 2, true, T0.Add(time.Minute))))
 	must(t, r.Save(bg, declare(t, OtherType, 1, false, T0.Add(2*time.Minute))))
 
-	got, err := r.List(bg)
-	must(t, err)
+	got := listAllPolicies(t, r)
 	if len(got) != 2 {
 		t.Fatalf("list = %d policies, want 2 (one per source type)", len(got))
 	}

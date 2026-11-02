@@ -149,43 +149,6 @@ func (r *Cases) ListOpen(_ context.Context, queue, siteID, sourceType string) ([
 	return out, nil
 }
 
-// List implements ports.ExceptionCaseRepo: every case whose status matches
-// ("" = every status, resolved cases included — resolve activity is part of
-// the record), narrowed by the non-blank filters, NEWEST opened first (then
-// case id descending) — the order the Postgres adapter returns too.
-func (r *Cases) List(_ context.Context, status, queue, siteID, sourceType string) ([]*exceptioncase.Case, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var out []*exceptioncase.Case
-	for _, id := range r.order {
-		c, err := r.restore(id)
-		if err != nil {
-			return nil, err
-		}
-		if status != "" && string(c.Status()) != status {
-			continue
-		}
-		k := c.Key()
-		if queue != "" && c.Queue() != queue {
-			continue
-		}
-		if siteID != "" && k.SiteID != siteID {
-			continue
-		}
-		if sourceType != "" && k.SourceType != sourceType {
-			continue
-		}
-		out = append(out, c)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].OpenedAt().Equal(out[j].OpenedAt()) {
-			return out[i].ID() > out[j].ID()
-		}
-		return out[i].OpenedAt().After(out[j].OpenedAt())
-	})
-	return out, nil
-}
-
 // Policies is the ExceptionPolicyRepo double (latest version per source type).
 type Policies struct {
 	mu     sync.Mutex
@@ -217,21 +180,6 @@ func (r *Policies) Get(_ context.Context, sourceType string) (*exceptionpolicy.P
 		return p, nil
 	}
 	return nil, ports.ErrNotFound
-}
-
-// List returns the latest version of every declared source type, ordered by
-// source type — the order the Postgres adapter returns too.
-func (r *Policies) List(_ context.Context) ([]*exceptionpolicy.Policy, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]*exceptionpolicy.Policy, 0, len(r.latest))
-	for _, p := range r.latest {
-		out = append(out, p)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].SourceType() < out[j].SourceType()
-	})
-	return out, nil
 }
 
 // IdempotencyStore is the in-memory ports.IdempotencyStore: the answers of

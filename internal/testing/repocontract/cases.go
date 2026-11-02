@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/claudioed/exception-management/internal/application/ports"
+	"github.com/claudioed/exception-management/internal/application/repository"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/shared"
@@ -31,6 +32,7 @@ func CaseRepo(t *testing.T, newRepo func(t *testing.T) ports.ExceptionCaseRepo) 
 		"a restored case has no pending events":              caseNoPendingEvents,
 		"list open excludes resolved and narrows by filters": caseListOpen,
 		"list serves every status newest first":              caseList,
+		"list pages walk every case once, ties included":     caseListPages,
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) { fn(t, newRepo(t)) })
@@ -259,25 +261,21 @@ func caseList(t *testing.T, r ports.ExceptionCaseRepo) {
 	save(t, r, resolved)
 
 	// No status filter: every case, open AND resolved, newest first.
-	got, err := r.List(bg, "", "", "", "")
-	must(t, err)
+	got := listAll(t, r, repository.CaseFilter{})
 	if !equalIDs(ids(got), []string{"case-x", "case-c", "case-b", "case-a"}) {
 		t.Fatalf("all statuses, newest first = %v", ids(got))
 	}
 	// The status filter narrows to exactly that status.
-	got, err = r.List(bg, "RESOLVED", "", "", "")
-	must(t, err)
+	got = listAll(t, r, repository.CaseFilter{Status: "RESOLVED"})
 	if !equalIDs(ids(got), []string{"case-x"}) {
 		t.Fatalf("resolved only = %v", ids(got))
 	}
-	got, err = r.List(bg, "OPEN", "", "", "")
-	must(t, err)
+	got = listAll(t, r, repository.CaseFilter{Status: "OPEN"})
 	if !equalIDs(ids(got), []string{"case-c", "case-b", "case-a"}) {
 		t.Fatalf("open only = %v", ids(got))
 	}
 	// The other filters combine with the status filter.
-	got, err = r.List(bg, "OPEN", "ps-main", "SIM1", SrcType)
-	must(t, err)
+	got = listAll(t, r, repository.CaseFilter{Status: "OPEN", Queue: "ps-main", SiteID: "SIM1", SourceType: SrcType})
 	if !equalIDs(ids(got), []string{"case-b", "case-a"}) {
 		t.Fatalf("open + queue + site + type = %v", ids(got))
 	}

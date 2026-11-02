@@ -4,6 +4,7 @@ import type {
   ExceptionCase,
   ExceptionPolicy,
   ListExceptionsQuery,
+  Page,
   ResolveBody,
   TriageBody,
 } from "./types";
@@ -55,8 +56,9 @@ export function toApiError(err: unknown): ApiError {
 
 /**
  * A fresh RFC 4122 v4 UUID for an Idempotency-Key header: minted once per
- * POST (one per triage/assign/resolve submission, so a double-click or a
- * retry replays the SAME logical command, never opens a second one).
+ * POST (one per triage/assign/resolve submission; a new user action mints a
+ * new key, and the server replays a repeated one with
+ * `Idempotency-Replayed: true` instead of running the command twice).
  * `crypto.randomUUID` only exists in secure contexts, and the console can be
  * opened over plain http on a non-localhost host, so fall back to
  * getRandomValues.
@@ -116,19 +118,34 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
 
 const seg = encodeURIComponent;
 
-/** GET /exceptions?status=&queue=&site=&sourceType= -- newest first, an empty
- *  array (never a 404) when nothing matches. */
-export async function listExceptions(q: ListExceptionsQuery = {}): Promise<ExceptionCase[]> {
-  const cases = await request<ExceptionCase[]>(
-    "GET",
-    withQuery("/exceptions", {
-      status: q.status,
-      queue: q.queue,
-      site: q.site,
-      sourceType: q.sourceType,
-    }),
-  );
-  return cases ?? [];
+/** The page size every list call asks for (the API maximum). */
+const PAGE_LIMIT = "500";
+
+/**
+ * Reads a whole collection: GETs `path` with the filters repeated on every
+ * page request, takes the rows from `items` and follows `nextCursor` until it
+ * is absent, so a collection that outgrows one page is never truncated.
+ */
+async function listAll<T>(path: string, filters: Query): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await request<Page<T> | null>("GET", withQuery(path, { ...filters, limit: PAGE_LIMIT, cursor }));
+    rows.push(...(page?.items ?? []));
+    cursor = page?.nextCursor || undefined;
+  } while (cursor);
+  return rows;
+}
+
+/** GET /exceptions?status=&queue=&site=&sourceType= -- newest first, every
+ *  page followed; an empty array (never a 404) when nothing matches. */
+export function listExceptions(q: ListExceptionsQuery = {}): Promise<ExceptionCase[]> {
+  return listAll<ExceptionCase>("/exceptions", {
+    status: q.status,
+    queue: q.queue,
+    site: q.site,
+    sourceType: q.sourceType,
+  });
 }
 
 /** GET /exceptions/{caseId} (404 case-not-found). */
@@ -137,34 +154,34 @@ export function getException(caseId: string): Promise<ExceptionCase> {
 }
 
 /**
- * POST /exceptions/{caseId}/triage: set or change severity and queue, moving
- * an OPEN case to TRIAGED. 409 case-already-resolved once terminal;
- * 400 invalid-severity / invalid-queue.
+ * POST /exceptions/{caseId}/triage-decisions: set or change severity and
+ * queue, moving an OPEN case to TRIAGED. 409 case-already-resolved once
+ * terminal; 400 invalid-severity / invalid-queue.
  */
 export function triageException(caseId: string, body: TriageBody): Promise<ExceptionCase> {
-  return request<ExceptionCase>("POST", `/exceptions/${seg(caseId)}/triage`, body);
+  return request<ExceptionCase>("POST", `/exceptions/${seg(caseId)}/triage-decisions`, body);
 }
 
 /**
- * POST /exceptions/{caseId}/assign: give the case an owner and move it to
- * ASSIGNED; reassigning is allowed while not resolved. 400 invalid-assignee.
+ * POST /exceptions/{caseId}/assignments: give the case an owner and move it
+ * to ASSIGNED; reassigning is allowed while not resolved. 400 invalid-assignee.
  */
 export function assignException(caseId: string, body: AssignBody): Promise<ExceptionCase> {
-  return request<ExceptionCase>("POST", `/exceptions/${seg(caseId)}/assign`, body);
+  return request<ExceptionCase>("POST", `/exceptions/${seg(caseId)}/assignments`, body);
 }
 
 /**
- * POST /exceptions/{caseId}/resolve: record resolution code + root cause and
- * move the case to RESOLVED, terminal. 409 case-already-resolved on any later
- * command; 400 invalid-resolution.
+ * POST /exceptions/{caseId}/resolutions: record resolution code + root cause
+ * and move the case to RESOLVED, terminal. 409 case-already-resolved on any
+ * later command; 400 invalid-resolution.
  */
 export function resolveException(caseId: string, body: ResolveBody): Promise<ExceptionCase> {
-  return request<ExceptionCase>("POST", `/exceptions/${seg(caseId)}/resolve`, body);
+  return request<ExceptionCase>("POST", `/exceptions/${seg(caseId)}/resolutions`, body);
 }
 
 /** GET /exception-policies -- the current version of every declared source
- *  type, ordered by source type; an empty array when none are declared. */
-export async function listExceptionPolicies(): Promise<ExceptionPolicy[]> {
-  const policies = await request<ExceptionPolicy[]>("GET", "/exception-policies");
-  return policies ?? [];
+ *  type, ordered by source type, every page followed; an empty array when
+ *  none are declared. */
+export function listExceptionPolicies(): Promise<ExceptionPolicy[]> {
+  return listAll<ExceptionPolicy>("/exception-policies", {});
 }
