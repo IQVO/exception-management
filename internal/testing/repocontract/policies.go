@@ -22,6 +22,7 @@ func PolicyRepo(t *testing.T, newRepo func(t *testing.T) ports.ExceptionPolicyRe
 		"a redeclaration becomes the latest version": policyLatest,
 		"a same-version save is a lost declare race": policySameVersionConflict,
 		"list returns every latest version by type":  policyList,
+		"list pages walk every policy once":          policyListPages,
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) { fn(t, newRepo(t)) })
@@ -33,7 +34,7 @@ func declare(t *testing.T, sourceType string, version int64, withRule bool, at t
 	rule, err := exceptionpolicy.NewRule("com.warehouse.wes.order-management.order.OrderRepromised", 10)
 	must(t, err)
 	in := exceptionpolicy.DeclareInput{
-		SourceType: sourceType, Severity: shared.SeverityHigh, Queue: "ps-main",
+		SourceType: sourceType, Severity: shared.SeverityHigh, Queue: queueMain,
 		SLAMinutes: 30, At: at,
 	}
 	if withRule {
@@ -46,7 +47,7 @@ func declare(t *testing.T, sourceType string, version int64, withRule bool, at t
 	}
 	// Build version N by redeclaring version N-1 (the use case's path).
 	prev := declare(t, sourceType, version-1, false, at.Add(-time.Minute))
-	in.Severity, in.Queue, in.SLAMinutes = shared.SeverityLow, "ps-urgent", 90
+	in.Severity, in.Queue, in.SLAMinutes = shared.SeverityLow, queueUrgent, 90
 	if withRule {
 		in.AutoResolve = &rule
 	}
@@ -71,7 +72,7 @@ func policyRoundTrip(t *testing.T, r ports.ExceptionPolicyRepo) {
 	in := declare(t, SrcType, 1, false, T0)
 	must(t, r.Save(bg, in))
 	got := get(t, r, SrcType)
-	if got.Version() != 1 || got.Severity() != shared.SeverityHigh || got.Queue() != "ps-main" || got.SLAMinutes() != 30 {
+	if got.Version() != 1 || got.Severity() != shared.SeverityHigh || got.Queue() != queueMain || got.SLAMinutes() != 30 {
 		t.Fatalf("declaration did not round trip: %+v", got.Snapshot())
 	}
 	if got.AutoResolve() != nil {
@@ -98,7 +99,7 @@ func policyLatest(t *testing.T, r ports.ExceptionPolicyRepo) {
 	must(t, r.Save(bg, declare(t, SrcType, 1, false, T0)))
 	must(t, r.Save(bg, declare(t, SrcType, 2, true, T0.Add(time.Minute))))
 	got := get(t, r, SrcType)
-	if got.Version() != 2 || got.Severity() != shared.SeverityLow || got.Queue() != "ps-urgent" || got.SLAMinutes() != 90 {
+	if got.Version() != 2 || got.Severity() != shared.SeverityLow || got.Queue() != queueUrgent || got.SLAMinutes() != 90 {
 		t.Fatalf("latest version = %+v, want v2", got.Snapshot())
 	}
 	if got.AutoResolve() == nil {
@@ -117,8 +118,7 @@ func policyList(t *testing.T, r ports.ExceptionPolicyRepo) {
 	must(t, r.Save(bg, declare(t, SrcType, 2, true, T0.Add(time.Minute))))
 	must(t, r.Save(bg, declare(t, OtherType, 1, false, T0.Add(2*time.Minute))))
 
-	got, err := r.List(bg)
-	must(t, err)
+	got := listAllPolicies(t, r)
 	if len(got) != 2 {
 		t.Fatalf("list = %d policies, want 2 (one per source type)", len(got))
 	}

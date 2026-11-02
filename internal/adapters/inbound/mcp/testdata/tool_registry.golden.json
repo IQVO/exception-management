@@ -281,10 +281,18 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "List the exception cases of the warehouse, newest opened first, optionally narrowed by status (OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike — resolve activity is part of the record), queue, site and/or the CloudEvents source type that opened them. Each case carries its dedup identity (source_type, source_subject, site_id), severity, queue, occurrence_count (how often the same exception happened), escalated flag, assignee when one exists, the SLA clock (sla_minutes, sla_due_at), the frozen source_payload of the opening fact and the audit trail of accepted transitions. Read-only.",
+    "description": "List the exception cases of the warehouse, newest opened first, one page at a time (limit, 1 to 500, omitted means 100; pass the returned next_cursor as cursor to get the next page — it is absent on the last page), optionally narrowed by status (OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike — resolve activity is part of the record), queue, site and/or the CloudEvents source type that opened them. Each case carries its dedup identity (source_type, source_subject, site_id), severity, queue, occurrence_count (how often the same exception happened), escalated flag, assignee when one exists, the SLA clock (sla_minutes, sla_due_at), the frozen source_payload of the opening fact and the audit trail of accepted transitions. Read-only.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "cursor": {
+          "description": "the opaque next_cursor returned by the previous page; omitted means the first page",
+          "type": "string"
+        },
+        "limit": {
+          "description": "page size, 1 to 500; omitted or 0 means 100",
+          "type": "integer"
+        },
         "queue": {
           "description": "keep only cases of this queue; omitted means every queue",
           "type": "string"
@@ -436,6 +444,9 @@
             "null",
             "array"
           ]
+        },
+        "next_cursor": {
+          "type": "string"
         }
       },
       "required": [

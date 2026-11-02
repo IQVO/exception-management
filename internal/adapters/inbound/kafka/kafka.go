@@ -209,7 +209,7 @@ func (l *consumeLoop) handleWithDeadLetter(ctx context.Context, p RetryPolicy, s
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	var poison *errDeadLetter
+	var poison *deadLetterError
 	if l.deadLetter != nil && errors.As(err, &poison) {
 		cause := deadLetterCause(err)
 		l.logger.ErrorContext(ctx, l.name+" message can never be applied; dead-lettering it without retry",

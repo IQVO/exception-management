@@ -104,17 +104,17 @@ func NewAnalyticsConsumer(brokers []string, topic, groupID string, projection re
 }
 
 // project maps one decoded CloudEvent of a known kind onto a report.Event
-// and applies it. Every deterministic refusal is an errDeadLetter marker (the
+// and applies it. Every deterministic refusal is an deadLetterError marker (the
 // run loop dead-letters and commits past); anything else is transient.
 func project(ctx context.Context, projection report.Projection, kind report.Kind, e ce.Event) error {
 	pe, err := toReportEvent(kind, e)
 	if err != nil {
-		return &errDeadLetter{cause: err}
+		return &deadLetterError{cause: err}
 	}
 	if _, err := projection.Apply(ctx, pe); err != nil {
 		if errors.Is(err, report.ErrRejected) {
 			//dlq:deterministic ErrRejected is minted only by the pure event validation or a Postgres SQLSTATE 22/23 rejection (analyticsstore.classify) -- never by a cancelled context
-			return &errDeadLetter{cause: err}
+			return &deadLetterError{cause: err}
 		}
 		return fmt.Errorf("analytics: project %s %s: %w", kind, e.ID(), err)
 	}

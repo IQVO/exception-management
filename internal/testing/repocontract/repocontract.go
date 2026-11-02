@@ -29,6 +29,18 @@ const (
 	OtherType = "com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected"
 )
 
+// Literals the suites repeat: the two queues a case moves between, the open
+// status filter, and the id of the suite's primary case.
+const (
+	queueMain   = "ps-main"
+	queueUrgent = "ps-urgent"
+	statusOpen  = "OPEN"
+	caseAID     = "case-a"
+	caseBID     = "case-b"
+	caseCID     = "case-c"
+	caseOneID   = "case-1"
+)
+
 var bg = context.Background()
 
 func must(t *testing.T, err error) {
@@ -57,7 +69,7 @@ func OpenedFor(t *testing.T, id, sourceType, subject, site string, at time.Time)
 	key, err := shared.NewDedupKey(sourceType, subject, site)
 	must(t, err)
 	c, err := exceptioncase.Open(exceptioncase.OpenInput{
-		CaseID: id, Key: key, Severity: shared.SeverityHigh, Queue: "ps-main",
+		CaseID: id, Key: key, Severity: shared.SeverityHigh, Queue: queueMain,
 		SLAMinutes: 30, SourceEventID: "evt-open-" + id,
 		Payload: []byte(`{"task_id":"task-8a1f","order_ref":"ord-7-line-1","cpt":"2026-10-21T09:00:00Z"}`),
 		At:      at,

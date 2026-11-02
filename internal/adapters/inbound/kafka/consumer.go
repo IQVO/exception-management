@@ -27,7 +27,7 @@ func skipf(format string, args ...any) error {
 }
 
 // HandlerFunc applies one decoded CloudEvent. nil means done (or
-// deterministic and skippable); an error wrapping errDeadLetter means a
+// deterministic and skippable); an error wrapping deadLetterError means a
 // poison message of a handled type (dead-lettered and committed past); any
 // other non-nil error is transient and retried.
 type HandlerFunc func(ctx context.Context, e ce.Event) error
@@ -105,7 +105,7 @@ func (c *Consumer) Close() error {
 //     type is unknowable, so there is nothing to replay from the DLQ);
 //   - a type this consumer does not act on: ignored;
 //   - errSkip (no policy declared): WARN, commit past;
-//   - errDeadLetter (poison of a handled type): WARN, the run loop
+//   - deadLetterError (poison of a handled type): WARN, the run loop
 //     dead-letters it and commits past (nil here when no DLQ is wired);
 //   - anything else: transient, returned for the capped retry.
 func (c *Consumer) HandleMessage(ctx context.Context, value []byte) error {
@@ -120,7 +120,7 @@ func (c *Consumer) HandleMessage(ctx context.Context, value []byte) error {
 		return nil
 	}
 	err = handle(ctx, e)
-	var poison *errDeadLetter
+	var poison *deadLetterError
 	if errors.As(err, &poison) {
 		logger.WarnContext(ctx, "an event that can never be applied; dead-lettering it",
 			"consumer", c.Name, "type", e.Type(), "event_id", e.ID(), "error", deadLetterCause(err))
@@ -141,7 +141,7 @@ func (c *Consumer) HandleMessage(ctx context.Context, value []byte) error {
 func decodeData[T any](e ce.Event) (T, error) {
 	var v T
 	if err := e.DataAs(&v); err != nil {
-		return v, &errDeadLetter{cause: skipf("payload of %s does not decode: %v", e.Type(), err)}
+		return v, &deadLetterError{cause: skipf("payload of %s does not decode: %v", e.Type(), err)}
 	}
 	return v, nil
 }
@@ -150,7 +150,7 @@ func decodeData[T any](e ce.Event) (T, error) {
 // natural id that cannot key a case (blank, or a blank-ish site) is poison.
 func fact(e ce.Event, subject, site string) (usecases.Fact, error) {
 	if _, err := shared.NewDedupKey(e.Type(), subject, site); err != nil {
-		return usecases.Fact{}, &errDeadLetter{cause: skipf("payload of %s carries no mappable id: %v", e.Type(), err)}
+		return usecases.Fact{}, &deadLetterError{cause: skipf("payload of %s carries no mappable id: %v", e.Type(), err)}
 	}
 	return usecases.Fact{
 		SourceType:    e.Type(),

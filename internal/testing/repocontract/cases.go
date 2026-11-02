@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/claudioed/exception-management/internal/application/ports"
+	"github.com/claudioed/exception-management/internal/application/repository"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/shared"
@@ -31,6 +32,7 @@ func CaseRepo(t *testing.T, newRepo func(t *testing.T) ports.ExceptionCaseRepo) 
 		"a restored case has no pending events":              caseNoPendingEvents,
 		"list open excludes resolved and narrows by filters": caseListOpen,
 		"list serves every status newest first":              caseList,
+		"list pages walk every case once, ties included":     caseListPages,
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) { fn(t, newRepo(t)) })
@@ -42,9 +44,11 @@ func save(t *testing.T, r ports.ExceptionCaseRepo, c *exceptioncase.Case) {
 	must(t, r.Save(bg, c))
 }
 
-func findByID(t *testing.T, r ports.ExceptionCaseRepo, id string) *exceptioncase.Case {
+// findCase1 reads the suite's primary case (case-1), the one every command
+// of the lifecycle suite is issued against.
+func findCase1(t *testing.T, r ports.ExceptionCaseRepo) *exceptioncase.Case {
 	t.Helper()
-	c, err := r.FindByID(bg, id)
+	c, err := r.FindByID(bg, caseOneID)
 	must(t, err)
 	return c
 }
@@ -82,7 +86,7 @@ func caseNotFound(t *testing.T, r ports.ExceptionCaseRepo) {
 func caseRoundTripOpen(t *testing.T, r ports.ExceptionCaseRepo) {
 	in := Opened(t, "case-1", Subject, T0)
 	save(t, r, in)
-	if got := findByID(t, r, "case-1").Snapshot(); !sameSnapshot(got, in.Snapshot()) {
+	if got := findCase1(t, r).Snapshot(); !sameSnapshot(got, in.Snapshot()) {
 		t.Fatalf("got %+v\nwant %+v", got, in.Snapshot())
 	}
 }
@@ -93,7 +97,7 @@ func caseRoundTripTouch(t *testing.T, r ports.ExceptionCaseRepo) {
 	stored := owner(t, r, Subject)
 	must(t, stored.Touch(T0.Add(5*time.Minute)))
 	save(t, r, stored)
-	got := findByID(t, r, "case-1")
+	got := findCase1(t, r)
 	if got.Occurrence() != 2 || got.Version() != 2 || got.LastSeenAt() != T0.Add(5*time.Minute) {
 		t.Fatalf("touch did not round trip: occurrence=%d version=%d lastSeen=%v", got.Occurrence(), got.Version(), got.LastSeenAt())
 	}
@@ -105,13 +109,13 @@ func caseRoundTripTouch(t *testing.T, r ports.ExceptionCaseRepo) {
 
 func caseRoundTripResolved(t *testing.T, r ports.ExceptionCaseRepo) {
 	c := Opened(t, "case-1", Subject, T0)
-	must(t, c.Triage(shared.SeverityCritical, "ps-urgent", mustActor(t, "op-9"), T0.Add(time.Minute)))
+	must(t, c.Triage(shared.SeverityCritical, queueUrgent, mustActor(t, "op-9"), T0.Add(time.Minute)))
 	must(t, c.Assign("op-7", mustActor(t, "op-9"), T0.Add(2*time.Minute)))
 	must(t, c.Resolve("RELOCATED", "bin-mismatch", "moved by hand", mustActor(t, "op-7"), T0.Add(3*time.Minute)))
 	save(t, r, c)
 
-	got := findByID(t, r, "case-1")
-	if got.Status() != exceptioncase.StatusResolved || got.Assignee() != "op-7" || got.Queue() != "ps-urgent" {
+	got := findCase1(t, r)
+	if got.Status() != exceptioncase.StatusResolved || got.Assignee() != "op-7" || got.Queue() != queueUrgent {
 		t.Fatalf("resolved state did not round trip: %+v", got.Snapshot())
 	}
 	if got.ResolutionCode() != "RELOCATED" || got.RootCause() != "bin-mismatch" || got.Note() != "moved by hand" {
@@ -131,7 +135,7 @@ func caseRoundTripAutoResolved(t *testing.T, r ports.ExceptionCaseRepo) {
 	must(t, c.AutoResolve("rule-x", "com.warehouse.wes.order-management.order.OrderRepromised", "evt-9", T0.Add(4*time.Minute)))
 	save(t, r, c)
 
-	got := findByID(t, r, "case-1").Snapshot()
+	got := findCase1(t, r).Snapshot()
 	if got.Status != exceptioncase.StatusResolved || !got.AutoResolved {
 		t.Fatalf("auto-resolve did not round trip: %+v", got)
 	}
@@ -167,7 +171,7 @@ func caseResolvedFreesKey(t *testing.T, r ports.ExceptionCaseRepo) {
 		t.Fatalf("key owner = %s, want the new open case case-2", got.ID())
 	}
 	// The resolved case is still there, still resolved.
-	if got := findByID(t, r, "case-1"); got.Status() != exceptioncase.StatusResolved {
+	if got := findCase1(t, r); got.Status() != exceptioncase.StatusResolved {
 		t.Fatalf("the resolved case changed: %s", got.Status())
 	}
 }
@@ -184,14 +188,14 @@ func caseVersionGuard(t *testing.T, r ports.ExceptionCaseRepo) {
 	must(t, second.Touch(T0.Add(2*time.Minute)))
 	save(t, r, first)
 	wantErr(t, r.Save(bg, second), usecases.ErrConcurrentModification)
-	if got := findByID(t, r, "case-1"); got.Occurrence() != 2 || !got.LastSeenAt().Equal(T0.Add(time.Minute)) {
+	if got := findCase1(t, r); got.Occurrence() != 2 || !got.LastSeenAt().Equal(T0.Add(time.Minute)) {
 		t.Fatalf("the loser overwrote the winner: %+v", got.Snapshot())
 	}
 	// The loser re-fetches, mutates the CURRENT state and succeeds.
-	retry := findByID(t, r, "case-1")
+	retry := findCase1(t, r)
 	must(t, retry.Touch(T0.Add(3*time.Minute)))
 	save(t, r, retry)
-	if got := findByID(t, r, "case-1"); got.Occurrence() != 3 {
+	if got := findCase1(t, r); got.Occurrence() != 3 {
 		t.Fatalf("retry after re-fetch failed: %+v", got.Snapshot())
 	}
 }
@@ -206,16 +210,16 @@ func caseResaveConflicts(t *testing.T, r ports.ExceptionCaseRepo) {
 
 func caseNoPendingEvents(t *testing.T, r ports.ExceptionCaseRepo) {
 	save(t, r, Opened(t, "case-1", Subject, T0))
-	if ev := findByID(t, r, "case-1").DomainEvents(); len(ev) != 0 {
+	if ev := findCase1(t, r).DomainEvents(); len(ev) != 0 {
 		t.Fatalf("events = %v", ev)
 	}
 }
 
 func caseListOpen(t *testing.T, r ports.ExceptionCaseRepo) {
-	save(t, r, Opened(t, "case-a", Subject, T0))                         // ps-main, SIM1, TaskCPTMissed
-	save(t, r, Opened(t, "case-b", "ord-8-line-1", T0.Add(time.Minute))) // ps-main, SIM1, TaskCPTMissed
-	c2 := OpenedFor(t, "case-c", OtherType, Subject, "SIM2", T0.Add(2*time.Minute))
-	must(t, c2.Triage(shared.SeverityLow, "ps-urgent", mustActor(t, "op-1"), T0.Add(2*time.Minute))) // queue ps-urgent, site SIM2
+	save(t, r, Opened(t, caseAID, Subject, T0))                         // ps-main, SIM1, TaskCPTMissed
+	save(t, r, Opened(t, caseBID, "ord-8-line-1", T0.Add(time.Minute))) // ps-main, SIM1, TaskCPTMissed
+	c2 := OpenedFor(t, caseCID, OtherType, Subject, "SIM2", T0.Add(2*time.Minute))
+	must(t, c2.Triage(shared.SeverityLow, queueUrgent, mustActor(t, "op-1"), T0.Add(2*time.Minute))) // queue ps-urgent, site SIM2
 	save(t, r, c2)
 	resolved := Opened(t, "case-x", "ord-9-line-1", T0.Add(3*time.Minute))
 	must(t, resolved.Resolve("DONE", "handled", "", mustActor(t, "op-1"), T0.Add(4*time.Minute)))
@@ -223,62 +227,58 @@ func caseListOpen(t *testing.T, r ports.ExceptionCaseRepo) {
 
 	got, err := r.ListOpen(bg, "", "", "")
 	must(t, err)
-	if !equalIDs(ids(got), []string{"case-a", "case-b", "case-c"}) {
+	if !equalIDs(ids(got), []string{caseAID, caseBID, caseCID}) {
 		t.Fatalf("all = %v", ids(got))
 	}
-	got, err = r.ListOpen(bg, "ps-main", "", "")
+	got, err = r.ListOpen(bg, queueMain, "", "")
 	must(t, err)
-	if !equalIDs(ids(got), []string{"case-a", "case-b"}) {
+	if !equalIDs(ids(got), []string{caseAID, caseBID}) {
 		t.Fatalf("by queue = %v", ids(got))
 	}
 	got, err = r.ListOpen(bg, "", "SIM1", "")
 	must(t, err)
-	if !equalIDs(ids(got), []string{"case-a", "case-b"}) {
+	if !equalIDs(ids(got), []string{caseAID, caseBID}) {
 		t.Fatalf("by site = %v", ids(got))
 	}
 	got, err = r.ListOpen(bg, "", "", OtherType)
 	must(t, err)
-	if !equalIDs(ids(got), []string{"case-c"}) {
+	if !equalIDs(ids(got), []string{caseCID}) {
 		t.Fatalf("by source type = %v", ids(got))
 	}
-	got, err = r.ListOpen(bg, "ps-urgent", "SIM2", OtherType)
+	got, err = r.ListOpen(bg, queueUrgent, "SIM2", OtherType)
 	must(t, err)
-	if !equalIDs(ids(got), []string{"case-c"}) {
+	if !equalIDs(ids(got), []string{caseCID}) {
 		t.Fatalf("by all three = %v", ids(got))
 	}
 }
 
 func caseList(t *testing.T, r ports.ExceptionCaseRepo) {
 	// Same world as caseListOpen: three open cases, one resolved.
-	save(t, r, Opened(t, "case-a", Subject, T0))                                          // ps-main, SIM1, TaskCPTMissed
-	save(t, r, Opened(t, "case-b", "ord-8-line-1", T0.Add(time.Minute)))                  // ps-main, SIM1, TaskCPTMissed
-	save(t, r, OpenedFor(t, "case-c", OtherType, Subject, "SIM2", T0.Add(2*time.Minute))) // queue ps-main, site SIM2
+	save(t, r, Opened(t, caseAID, Subject, T0))                                          // ps-main, SIM1, TaskCPTMissed
+	save(t, r, Opened(t, caseBID, "ord-8-line-1", T0.Add(time.Minute)))                  // ps-main, SIM1, TaskCPTMissed
+	save(t, r, OpenedFor(t, caseCID, OtherType, Subject, "SIM2", T0.Add(2*time.Minute))) // queue ps-main, site SIM2
 	resolved := Opened(t, "case-x", "ord-9-line-1", T0.Add(3*time.Minute))
-	must(t, resolved.Triage(shared.SeverityCritical, "ps-urgent", mustActor(t, "op-1"), T0.Add(3*time.Minute)))
+	must(t, resolved.Triage(shared.SeverityCritical, queueUrgent, mustActor(t, "op-1"), T0.Add(3*time.Minute)))
 	must(t, resolved.Resolve("DONE", "handled", "", mustActor(t, "op-1"), T0.Add(4*time.Minute)))
 	save(t, r, resolved)
 
 	// No status filter: every case, open AND resolved, newest first.
-	got, err := r.List(bg, "", "", "", "")
-	must(t, err)
-	if !equalIDs(ids(got), []string{"case-x", "case-c", "case-b", "case-a"}) {
+	got := listAll(t, r, repository.CaseFilter{})
+	if !equalIDs(ids(got), []string{"case-x", caseCID, caseBID, caseAID}) {
 		t.Fatalf("all statuses, newest first = %v", ids(got))
 	}
 	// The status filter narrows to exactly that status.
-	got, err = r.List(bg, "RESOLVED", "", "", "")
-	must(t, err)
+	got = listAll(t, r, repository.CaseFilter{Status: "RESOLVED"})
 	if !equalIDs(ids(got), []string{"case-x"}) {
 		t.Fatalf("resolved only = %v", ids(got))
 	}
-	got, err = r.List(bg, "OPEN", "", "", "")
-	must(t, err)
-	if !equalIDs(ids(got), []string{"case-c", "case-b", "case-a"}) {
+	got = listAll(t, r, repository.CaseFilter{Status: statusOpen})
+	if !equalIDs(ids(got), []string{caseCID, caseBID, caseAID}) {
 		t.Fatalf("open only = %v", ids(got))
 	}
 	// The other filters combine with the status filter.
-	got, err = r.List(bg, "OPEN", "ps-main", "SIM1", SrcType)
-	must(t, err)
-	if !equalIDs(ids(got), []string{"case-b", "case-a"}) {
+	got = listAll(t, r, repository.CaseFilter{Status: statusOpen, Queue: queueMain, SiteID: "SIM1", SourceType: SrcType})
+	if !equalIDs(ids(got), []string{caseBID, caseAID}) {
 		t.Fatalf("open + queue + site + type = %v", ids(got))
 	}
 }

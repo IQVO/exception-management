@@ -83,7 +83,7 @@ func TestProjectorFoldsTheRealOutboxStreamAndTheReportsServeIt(t *testing.T) {
 
 	// The analytical side: migrated by the projector's own boot step.
 	analyticsURL := pgtest.EmptyURL(t)
-	analyticsPool, err := openAnalyticsPool(ctx, logger, analyticsURL)
+	analyticsPool, err := openAnalyticsPool(ctx, analyticsURL)
 	if err != nil {
 		t.Fatalf("openAnalyticsPool: %v", err)
 	}

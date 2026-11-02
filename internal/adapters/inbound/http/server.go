@@ -8,11 +8,24 @@ import (
 	"github.com/claudioed/exception-management/internal/application/usecases"
 )
 
-// wireActor is the actor every REST command records. The contract carries
-// no operator identity (there is no auth layer, fleet decision 2026-09-11,
-// and no actor header in apis/openapi.yaml), so v1 records `system` — one of
-// the ADR 0002 actor kinds — and the assignee field carries ownership.
-const wireActor = "system"
+// systemActor is the actor a command records when the request names no
+// operator: one of the ADR 0002 actor kinds, and the pre-header behavior
+// (the assignee field carries ownership). Policy declaration always
+// records it.
+const systemActor = "system"
+
+// actorFor is the actor a case command records: the operator identity of
+// the request's optional X-Actor header, or `system` when the header is
+// absent or blank. It is a label for the audit trail, not authentication
+// (there is no auth layer, fleet decision 2026-09-11); the use cases
+// validate the name, so a header with a NUL byte is the 400 invalid-actor
+// problem.
+func actorFor(r *http.Request) string {
+	if v := r.Header.Get("X-Actor"); v != "" {
+		return v
+	}
+	return systemActor
+}
 
 // Server holds the use cases the handlers call.
 type Server struct {
@@ -24,7 +37,7 @@ type Server struct {
 	Declare      *usecases.DeclareExceptionPolicy
 	ListPolicies *usecases.ListExceptionPolicies
 
-	// Idempotency wraps the POSTs and the PUT (the fleet Idempotency-Key
+	// Idempotency wraps every POST and the PUT (the fleet Idempotency-Key
 	// middleware, Idempotency.Middleware, built by cmd/ over the Postgres
 	// adapters); nil leaves the routes unwrapped (handler unit tests only:
 	// cmd/ always wires it).
@@ -34,10 +47,11 @@ type Server struct {
 }
 
 // NewRouter builds the chi router for every endpoint of apis/openapi.yaml
-// (.claude/rules/rest-api.md). The POST /exceptions route exists only to
-// answer 405 with the reason (there is deliberately no case-creation
-// endpoint: every case opens from a consumed fact, ADR 0001), so it sits
-// OUTSIDE the Idempotency group: a 405 must not demand a key first.
+// (.claude/rules/rest-api.md). Every POST sits in the Idempotency group
+// (REST guideline R3), POST /exceptions included: it exists only to answer
+// 405 with the reason (there is deliberately no case-creation endpoint:
+// every case opens from a consumed fact, ADR 0001), and like every POST it
+// demands a key first and stores and replays that deterministic answer.
 func NewRouter(s *Server) http.Handler {
 	r := chi.NewRouter()
 
@@ -49,7 +63,6 @@ func NewRouter(s *Server) http.Handler {
 	r.Get("/metrics", handleMetrics)
 
 	r.Get("/exceptions", s.handleListExceptions)
-	r.Post("/exceptions", s.handleNoPostExceptions)
 	r.Get("/exceptions/{caseId}", s.handleGetException)
 
 	r.Get("/exception-policies", s.handleListPolicies)
@@ -58,9 +71,10 @@ func NewRouter(s *Server) http.Handler {
 		if s.Idempotency != nil {
 			r.Use(s.Idempotency)
 		}
-		r.Post("/exceptions/{caseId}/triage", s.handleTriageException)
-		r.Post("/exceptions/{caseId}/assign", s.handleAssignException)
-		r.Post("/exceptions/{caseId}/resolve", s.handleResolveException)
+		r.Post("/exceptions", s.handleNoPostExceptions)
+		r.Post("/exceptions/{caseId}/triage-decisions", s.handleTriageException)
+		r.Post("/exceptions/{caseId}/assignments", s.handleAssignException)
+		r.Post("/exceptions/{caseId}/resolutions", s.handleResolveException)
 		r.Put("/exception-policies/{sourceType}", s.handleDeclarePolicy)
 	})
 

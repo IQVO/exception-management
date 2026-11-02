@@ -181,7 +181,7 @@ func TestAnalyticsConsumerSkipsNonCloudEvents(t *testing.T) {
 }
 
 // Poison: a payload whose subject does not match, one that fails validation,
-// and one the store deterministically rejects. All are errDeadLetter markers
+// and one the store deterministically rejects. All are deadLetterError markers
 // so the run loop parks them on the DLQ and commits past.
 func TestAnalyticsConsumerDeadLettersDeterministicRefusals(t *testing.T) {
 	cases := []struct {
@@ -201,7 +201,7 @@ func TestAnalyticsConsumerDeadLettersDeterministicRefusals(t *testing.T) {
 		consumer := newTestAnalyticsConsumer(proj)
 		err := consumer.HandleMessage(context.Background(),
 			analyticsEvent(t, c.entity, c.event, c.subject, c.payload))
-		var poison *errDeadLetter
+		var poison *deadLetterError
 		if !errors.As(err, &poison) {
 			t.Errorf("%s: %v, want the dead-letter marker", c.name, err)
 		}
@@ -216,7 +216,7 @@ func TestAnalyticsConsumerSeparatesRejectionFromTransient(t *testing.T) {
 	good := analyticsEvent(t, "exceptioncase", "ExceptionResolved", "case-1",
 		`{"case_id":"case-1","resolution_code":"DONE","root_cause":"X","note":null,"actor":"a","at":"2026-10-21T10:15:00Z"}`)
 	err := c.HandleMessage(context.Background(), good)
-	var poison *errDeadLetter
+	var poison *deadLetterError
 	if !errors.As(err, &poison) || !errors.Is(err, report.ErrRejected) {
 		t.Fatalf("rejected: %v, want the dead-letter marker wrapping ErrRejected", err)
 	}
@@ -227,7 +227,7 @@ func TestAnalyticsConsumerSeparatesRejectionFromTransient(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("transient: %v, want it returned for the retry", err)
 	}
-	var marker *errDeadLetter
+	var marker *deadLetterError
 	if errors.As(err, &marker) {
 		t.Fatal("a transient failure must not carry the dead-letter marker")
 	}

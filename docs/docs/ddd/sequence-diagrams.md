@@ -49,7 +49,7 @@ sequenceDiagram
     participant PG as Postgres
     participant T as warehouse.exception-management.events
 
-    O->>H: POST /exceptions/{caseId}/triage
+    O->>H: POST /exceptions/{caseId}/triage-decisions
     H->>H: Idempotency-Key middleware (replay = stored answer)
     H->>UC: severity + queue, actor = operator
     UC->>AG: Triage(...)

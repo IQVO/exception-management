@@ -1,6 +1,9 @@
 package shared
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestSystemOperatorAndPolicyConstructorsBuildValidActors(t *testing.T) {
 	t.Parallel()
@@ -22,10 +25,10 @@ func TestActorConstructorsRejectBlankNames(t *testing.T) {
 	t.Parallel()
 	bad := []string{"", " ", "\x00"}
 	for _, name := range bad {
-		if _, err := Operator(name); err != ErrBlankActor {
+		if _, err := Operator(name); !errors.Is(err, ErrBlankActor) {
 			t.Errorf("Operator(%q) err = %v, want ErrBlankActor", name, err)
 		}
-		if _, err := Policy(name); err != ErrBlankActor {
+		if _, err := Policy(name); !errors.Is(err, ErrBlankActor) {
 			t.Errorf("Policy(%q) err = %v, want ErrBlankActor", name, err)
 		}
 	}

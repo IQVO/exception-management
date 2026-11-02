@@ -43,13 +43,15 @@ type ExceptionCaseRepo interface {
 	// nothing), ordered by opened-at then case id. Serves the SLA sweeper
 	// and the correlation paths.
 	ListOpen(ctx context.Context, queue, siteID, sourceType string) ([]*exceptioncase.Case, error)
-	// List serves the operator listing (GET /exceptions): every case whose
-	// status matches status ("" = EVERY status, open and resolved alike —
-	// resolve activity is part of the record, per apis/openapi.yaml),
-	// narrowed by the non-blank filters, NEWEST opened first (opened-at
+	// ListPage serves the operator listing (GET /exceptions), one keyset page
+	// at a time: at most limit cases matching the filter (Status "" = EVERY
+	// status, open and resolved alike — resolve activity is part of the
+	// record, per apis/openapi.yaml), NEWEST opened first (opened-at
 	// descending, then case id descending — the order the in-memory adapter
-	// returns too).
-	List(ctx context.Context, status, queue, siteID, sourceType string) ([]*exceptioncase.Case, error)
+	// returns too), strictly after the position `after` (nil = the first
+	// page). Callers ask for limit+1 rows to learn whether another page
+	// exists.
+	ListPage(ctx context.Context, f repository.CaseFilter, after *repository.CaseAfter, limit int) ([]*exceptioncase.Case, error)
 }
 
 // ExceptionPolicyRepo persists the append-only ExceptionPolicy versions by
@@ -60,9 +62,11 @@ type ExceptionPolicyRepo interface {
 	// Get returns the LATEST declared version of the source type's policy, or
 	// ErrNotFound when the type was never declared.
 	Get(ctx context.Context, sourceType string) (*exceptionpolicy.Policy, error)
-	// List returns the latest declared version of EVERY source type,
-	// ordered by source type (GET /exception-policies).
-	List(ctx context.Context) ([]*exceptionpolicy.Policy, error)
+	// ListPage returns at most limit policies — the latest declared version
+	// of each source type — ordered by source type, strictly after the
+	// source type `after` ("" = the first page). Callers ask for limit+1 rows
+	// to learn whether another page exists (GET /exception-policies).
+	ListPage(ctx context.Context, after string, limit int) ([]*exceptionpolicy.Policy, error)
 }
 
 // ProcessedEvents is the inbound consumers' dedupe guard (the fleet rule:

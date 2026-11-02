@@ -49,7 +49,7 @@ solved.
 
 ## Resolve (two ways)
 
-- **Human**: `POST /exceptions/{caseId}/resolve` with a `resolutionCode`, a `rootCause` and an
+- **Human**: `POST /exceptions/{caseId}/resolutions` with a `resolutionCode`, a `rootCause` and an
   optional note. The actor is recorded.
 - **Auto**: a policy's `auto_resolve` rule — `{on_type, within_minutes}` — fires when the
   correlated type arrives within the window of the case's `last_seen_at` (edge inclusive). The

@@ -127,7 +127,7 @@ func TestOutboxStoreDrainDecodesAndRemovesPublishedRows(t *testing.T) {
 
 // The first failure stops the pass at that row: it records attempts+1 and a
 // future next_attempt_at (the exponential backoff), the rows behind it are
-// left untouched, and the error is an *outbox.SendFailure with the new count.
+// left untouched, and the error is an *outbox.SendFailureError with the new count.
 func TestOutboxStoreFailureRecordsBackoffAndStopsThePass(t *testing.T) {
 	pool := pgtest.NewPool(t)
 	store := postgres.NewOutboxStore(pool)
@@ -140,9 +140,9 @@ func TestOutboxStoreFailureRecordsBackoffAndStopsThePass(t *testing.T) {
 	if err == nil || published != 0 {
 		t.Fatalf("Drain = %d, %v; want 0 and the failure", published, err)
 	}
-	var sf *outbox.SendFailure
+	var sf *outbox.SendFailureError
 	if !errors.As(err, &sf) || sf.RowID != poison || sf.Attempts != 1 {
-		t.Fatalf("err = %v, want *SendFailure{row %d, attempts 1}", err, poison)
+		t.Fatalf("err = %v, want *SendFailureError{row %d, attempts 1}", err, poison)
 	}
 	attempts, due, next := rowState(t, pool, poison)
 	if attempts != 1 || due || !next.After(time.Now()) {

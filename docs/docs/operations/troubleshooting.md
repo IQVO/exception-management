@@ -40,8 +40,8 @@ sidebar_position: 4
 | Status / slug | Cause | Fix |
 | --- | --- | --- |
 | `405 method-not-allowed` on `POST /exceptions` | by design: every case starts from a consumed fact | produce the fact on its topic ([Quickstart](/docs/overview/quickstart)) |
-| `400 idempotency-key-required` | a write without the header | send `Idempotency-Key` on triage/assign/resolve/PUT policy |
-| `409 idempotency-key-reused` | same key replayed with a *different* body | the first answer is the stored one; use a new key only for a new intent |
+| `400 idempotency-key-required` | a write without the header | send `Idempotency-Key` on every `POST` and on `PUT` policy |
+| `409 idempotency-key-reused` | same key replayed with a *different* method, path or body | the first answer is the stored one (an exact repeat carries `Idempotency-Replayed: true`); use a new key only for a new intent |
 | `400 malformed-request-body` | bad JSON, unknown field, trailing data — strict by design; also a NUL byte | send exactly the contract's body |
 | `409 case-already-resolved` | resolve (or a state change) on a terminal case | resolution is terminal; a recurring problem is a *touch*, reopen is not in v1 |
 | `409 concurrent-modification` | two writers raced the aggregate version | re-read the case, reapply the intent |

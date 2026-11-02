@@ -78,6 +78,13 @@ export interface ExceptionPolicy {
   declaredAt: string;
 }
 
+/** The envelope every list route answers: one page of rows plus the opaque
+ *  token of the next page (absent on the last page). */
+export interface Page<T> {
+  items: T[];
+  nextCursor?: string;
+}
+
 export interface ListExceptionsQuery {
   status?: CaseStatus;
   queue?: string;
@@ -86,18 +93,18 @@ export interface ListExceptionsQuery {
   sourceType?: string;
 }
 
-/** The body of POST /exceptions/{caseId}/triage. */
+/** The body of POST /exceptions/{caseId}/triage-decisions. */
 export interface TriageBody {
   severity: Severity;
   queue: string;
 }
 
-/** The body of POST /exceptions/{caseId}/assign. */
+/** The body of POST /exceptions/{caseId}/assignments. */
 export interface AssignBody {
   assignee: string;
 }
 
-/** The body of POST /exceptions/{caseId}/resolve. `note` omitted when empty. */
+/** The body of POST /exceptions/{caseId}/resolutions. `note` omitted when empty. */
 export interface ResolveBody {
   resolutionCode: string;
   rootCause: string;

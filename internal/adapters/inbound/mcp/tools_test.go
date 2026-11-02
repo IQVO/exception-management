@@ -162,3 +162,40 @@ func TestGetSLAReportTool(t *testing.T) {
 		t.Error("generated_at is absent")
 	}
 }
+
+// TestListOpenExceptionsToolPages covers the paging contract of the listing
+// tool: a limit carves one page and returns next_cursor, the cursor serves
+// the next page, next_cursor is absent on the last page, and a bad limit or
+// cursor fails with the invalid-query slug.
+func TestListOpenExceptionsToolPages(t *testing.T) {
+	h := newHarness(t)
+	h.declarePolicy(t, testSourceType, 30, "", 0)
+	c1 := h.openCase(t, "task-1", "SITE-1", -2*time.Hour)
+	c2 := h.openCase(t, "task-2", "SITE-2", -1*time.Hour)
+	c3 := h.openCase(t, "task-3", "SITE-1", 0)
+
+	first := h.ok(t, "list_open_exceptions", map[string]any{"limit": 2})
+	if got := strs(first, "items", "case_id"); len(got) != 2 || got[0] != c3 || got[1] != c2 {
+		t.Fatalf("first page = %v, want [%s %s]", got, c3, c2)
+	}
+	cursor, _ := first["next_cursor"].(string)
+	if cursor == "" {
+		t.Fatal("first page carries no next_cursor")
+	}
+
+	second := h.ok(t, "list_open_exceptions", map[string]any{"limit": 2, "cursor": cursor})
+	if got := strs(second, "items", "case_id"); len(got) != 1 || got[0] != c1 {
+		t.Fatalf("second page = %v, want [%s]", got, c1)
+	}
+	if _, has := second["next_cursor"]; has {
+		t.Error("next_cursor must be absent on the last page")
+	}
+
+	// Below the page size the default call still answers everything.
+	if got := strs(h.ok(t, "list_open_exceptions", map[string]any{"limit": 500}), "items", "case_id"); len(got) != 3 {
+		t.Fatalf("one big page = %v, want all 3", got)
+	}
+
+	failWith(t, h.session, "list_open_exceptions", map[string]any{"limit": 501}, "invalid-query")
+	failWith(t, h.session, "list_open_exceptions", map[string]any{"cursor": "!!!not-a-token!!!"}, "invalid-query")
+}

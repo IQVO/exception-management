@@ -10,14 +10,20 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/claudioed/exception-management/internal/adapters/inbound/http/page"
 	"github.com/claudioed/exception-management/internal/application/ports"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/exceptionpolicy"
+	"github.com/claudioed/exception-management/internal/domain/shared"
 )
 
 // problemBaseURI is the namespace of this service's RFC 7807 `type` URIs.
 const problemBaseURI = "https://errors.exception-management.warehouse-systems.dev/"
+
+// slugMalformedRequestBody is the slug of every malformed-body problem (the
+// catalogue entry and the NUL guard's three variants share it).
+const slugMalformedRequestBody = "malformed-request-body"
 
 // Errors the adapter itself raises, before or besides the use cases. Their
 // text never reaches a client: the catalogue pairs each with a fixed
@@ -64,6 +70,7 @@ var internalProblem = problem{status: http.StatusInternalServerError, slug: "int
 // before any use case runs.
 var (
 	idempotencyKeyRequired = problem{status: http.StatusBadRequest, slug: "idempotency-key-required", title: "Idempotency-Key header is required"}
+	idempotencyKeyInvalid  = problem{status: http.StatusBadRequest, slug: "idempotency-key-invalid", title: "Idempotency-Key header is invalid"}
 	idempotencyKeyReused   = problem{status: http.StatusConflict, slug: "idempotency-key-reused", title: "Idempotency-Key was already used with a different request"}
 	notFoundProblem        = problem{status: http.StatusNotFound, slug: "not-found", title: "Not found"}
 	methodNotAllowed       = problem{status: http.StatusMethodNotAllowed, slug: "method-not-allowed", title: "Method not allowed"}
@@ -85,6 +92,8 @@ var (
 		"queue must not be blank"}
 	invalidAssigneeProblem = problem{http.StatusBadRequest, "invalid-assignee", "Assignee is invalid",
 		"assignee must not be blank"}
+	invalidActorProblem = problem{http.StatusBadRequest, "invalid-actor", "Actor is invalid",
+		"the X-Actor header must name the operator performing the command, non-blank with no NUL byte"}
 	invalidResolutionProblem = problem{http.StatusBadRequest, "invalid-resolution", "Resolution is invalid",
 		"resolutionCode and rootCause must not be blank"}
 	invalidPolicyProblem = problem{http.StatusBadRequest, "invalid-policy", "Policy is invalid",
@@ -98,7 +107,7 @@ var problemCatalogue = []struct {
 	err error
 	p   problem
 }{
-	{errMalformedRequest, problem{status: http.StatusBadRequest, slug: "malformed-request-body", title: "Malformed request body",
+	{errMalformedRequest, problem{status: http.StatusBadRequest, slug: slugMalformedRequestBody, title: "Malformed request body",
 		detail: "request body is not valid JSON for this operation"}},
 	{errInvalidCaseID, invalidCaseIDProblem},
 	{errInvalidSourceType, invalidSourceTypeProblem},
@@ -109,6 +118,13 @@ var problemCatalogue = []struct {
 	{errInvalidResolution, invalidResolutionProblem},
 	{errInvalidPolicy, invalidPolicyProblem},
 
+	// The paging parameters of a collection GET (REST guideline 3 and 4.2).
+	{page.ErrInvalidLimit, problem{status: http.StatusBadRequest, slug: "invalid-limit", title: "Limit is invalid",
+		detail: page.ErrInvalidLimit.Error()}},
+	{page.ErrInvalidCursor, problem{status: http.StatusBadRequest, slug: "invalid-cursor", title: "Cursor is invalid",
+		detail: page.ErrInvalidCursor.Error()}},
+	{errUnknownQueryParameter, problem{status: http.StatusBadRequest, slug: "unknown-query-parameter", title: "Query parameter is not supported"}},
+
 	// The domain's own validation is the backstop behind the adapter's; the
 	// same slugs, so a rule missed here cannot become a 500.
 	{exceptioncase.ErrInvalidSeverity, invalidSeverityProblem},
@@ -116,6 +132,7 @@ var problemCatalogue = []struct {
 	{exceptioncase.ErrBlankQueue, invalidQueueProblem},
 	{exceptionpolicy.ErrBlankQueue, invalidQueueProblem},
 	{exceptioncase.ErrBlankAssignee, invalidAssigneeProblem},
+	{shared.ErrBlankActor, invalidActorProblem},
 	{exceptioncase.ErrBlankResolutionCode, invalidResolutionProblem},
 	{exceptioncase.ErrBlankRootCause, invalidResolutionProblem},
 	{exceptionpolicy.ErrInvalidSourceType, invalidSourceTypeProblem},
