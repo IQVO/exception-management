@@ -108,6 +108,20 @@ already-lived incident, not a hypothetical:
   2026-10, D16). A field whose `jsonschema` description says "optional" must
   carry `omitempty`. Skips when the service has no
   `internal/adapters/inbound/mcp`.
+- **Agent authority sensors** (`mcp_authority_fitness_test.go`:
+  `TestEveryMCPToolDeclaresAuthority`, `TestMCPWriteToolsAreAtLeastL3`,
+  `TestA2ASkillsDeclareAuthority`, `TestMCPServerOffersResourceAndPrompt`;
+  the sensors' own fixtures are `TestMCPAuthoritySensorBites`,
+  `TestMCPWriteLevelSensorBites`, `TestA2AAuthoritySensorBites`,
+  `TestMCPSurfaceSensorBites`, `TestAgentAdapterSkipRules`) — Agentic
+  Standard v2, fleet rule `agent-authority` (warehouse-docs
+  `agents/fleet/agent-authority.md`): every MCP tool declares one authority
+  level `L1..L4` in `Meta` under `com.warehouse/authority` (the pinned shape
+  `Meta: authorityMeta(authorityL1)` with the package consts), every A2A
+  skill carries an `authority:L<n>` tag, a write tool is L3 (L4 only with an
+  ADR comment in the file), and the MCP surface offers at least one resource
+  and one prompt. Static `go/ast` scan, no server, no database; skips when
+  the service has no adapter. Copied verbatim from the harness template.
 - **TestOutboxRelaysPassAttemptCap** (`outbox_relay_cap_fitness_test.go`,
   + `TestOutboxRelayCapSensorFailsOnBadFixtures`,
   `TestOutboxRelayDeclarationDetector`) — inventory-storage's relay had no
