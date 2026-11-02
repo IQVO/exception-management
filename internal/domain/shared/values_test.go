@@ -1,12 +1,15 @@
 package shared
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestNewIDRejectsBlankAndNUL(t *testing.T) {
 	t.Parallel()
 	bad := []string{"", " ", "	", "\x00", "a\x00", string(rune(0xFEFF))}
 	for _, in := range bad {
-		if _, err := NewID(in); err != ErrBlankID {
+		if _, err := NewID(in); !errors.Is(err, ErrBlankID) {
 			t.Errorf("NewID(%q) err = %v, want ErrBlankID", in, err)
 		}
 	}
@@ -25,13 +28,13 @@ func TestNewIDRejectsBlankAndNUL(t *testing.T) {
 
 func TestNewDedupKeyRejectsBlankPartsAndKeepsAnEmptySite(t *testing.T) {
 	t.Parallel()
-	if _, err := NewDedupKey("  ", "task-8a1f", "site-1"); err != ErrBlankSourceType {
+	if _, err := NewDedupKey("  ", "task-8a1f", "site-1"); !errors.Is(err, ErrBlankSourceType) {
 		t.Errorf("blank source type: err = %v, want ErrBlankSourceType", err)
 	}
-	if _, err := NewDedupKey("type", "\x00", "site-1"); err != ErrBlankSourceSubject {
+	if _, err := NewDedupKey("type", "\x00", "site-1"); !errors.Is(err, ErrBlankSourceSubject) {
 		t.Errorf("NUL source subject: err = %v, want ErrBlankSourceSubject", err)
 	}
-	if _, err := NewDedupKey("type", "task-8a1f", "  "); err != ErrInvalidSite {
+	if _, err := NewDedupKey("type", "task-8a1f", "  "); !errors.Is(err, ErrInvalidSite) {
 		t.Errorf("blank-ish site: err = %v, want ErrInvalidSite", err)
 	}
 	k, err := NewDedupKey("type", "task-8a1f", "")

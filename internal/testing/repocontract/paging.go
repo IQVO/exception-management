@@ -90,7 +90,7 @@ func caseListPages(t *testing.T, r ports.ExceptionCaseRepo) {
 		}
 	}
 	// A filter is repeated on every page request and narrows every page.
-	got := walkCases(t, r, repository.CaseFilter{Status: "OPEN", Queue: "ps-main"}, 2)
+	got := walkCases(t, r, repository.CaseFilter{Status: statusOpen, Queue: queueMain}, 2)
 	if !slices.Equal(got, want) {
 		t.Fatalf("filtered walk = %v, want %v", got, want)
 	}

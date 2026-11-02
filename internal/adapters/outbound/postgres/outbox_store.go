@@ -36,7 +36,7 @@ func NewOutboxStore(pool *pgxpool.Pool) *OutboxStore { return &OutboxStore{pool:
 // forward — 2^attempts seconds, capped at five minutes), the rows after it
 // are left untouched — a later row never overtakes a row still being
 // retried — and the pass COMMITS what it already staged, so nothing before
-// the failure is lost. The error comes back as *outbox.SendFailure carrying
+// the failure is lost. The error comes back as *outbox.SendFailureError carrying
 // the row's new attempt count.
 //
 // A row whose payload is not the envelope OutboxPublisher writes does not
@@ -76,7 +76,7 @@ func (s *OutboxStore) Drain(ctx context.Context, limit, maxAttempts int, handle 
 // cancellation-proof context so a shutdown mid-pass still persists both.
 func (s *OutboxStore) recordFailure(ctx context.Context, tx pgx.Tx, row outbox.Row, sendErr error) error {
 	dctx := context.WithoutCancel(ctx)
-	failure := &outbox.SendFailure{RowID: row.ID, Row: row, Err: sendErr}
+	failure := &outbox.SendFailureError{RowID: row.ID, Row: row, Err: sendErr}
 	if err := tx.QueryRow(dctx, `
 		UPDATE outbox
 		SET attempts = attempts + 1,

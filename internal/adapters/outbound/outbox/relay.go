@@ -41,7 +41,7 @@ const AttemptCapReachedMsg = "outbox relay: row reached the attempt cap and is e
 // due rows in id order — skipping rows that already failed maxAttempts times
 // when maxAttempts > 0 — calls handle for each one at a time, removes a row
 // only after handle returned nil, and stops at the first handle error, which
-// it returns as an *outbox.SendFailure. postgres.OutboxStore implements it.
+// it returns as an *outbox.SendFailureError. postgres.OutboxStore implements it.
 type Store interface {
 	Drain(ctx context.Context, limit, maxAttempts int, handle func(context.Context, outbox.Row) error) (int, error)
 }
@@ -127,7 +127,7 @@ func (r *Relay) RelayOnce(ctx context.Context) (int, error) {
 // operator re-arms it (UPDATE outbox SET attempts = 0, next_attempt_at = now()
 // WHERE id = ...).
 func (r *Relay) logAttemptCap(ctx context.Context, err error) {
-	var sf *outbox.SendFailure
+	var sf *outbox.SendFailureError
 	if r.maxAttempts == 0 || !errors.As(err, &sf) || sf.Attempts < r.maxAttempts {
 		return
 	}

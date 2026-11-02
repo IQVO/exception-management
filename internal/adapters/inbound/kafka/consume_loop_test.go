@@ -192,7 +192,7 @@ func TestConsumeLoop_DeadLettersPoisonAtOnce(t *testing.T) {
 		sleep: func(context.Context, time.Duration) error { return nil },
 		handle: func(_ context.Context, m kafkago.Message) error {
 			if string(m.Value) == "poison" {
-				return &errDeadLetter{cause: errors.New("no mappable id")}
+				return &deadLetterError{cause: errors.New("no mappable id")}
 			}
 			return nil
 		},

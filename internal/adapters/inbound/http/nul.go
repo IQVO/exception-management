@@ -29,7 +29,7 @@ func rejectNUL(next http.Handler) http.Handler {
 			return
 		}
 		if strings.ContainsRune(r.URL.RawQuery, 0) || strings.Contains(r.URL.RawQuery, "%00") {
-			writeProblem(w, r, problem{status: http.StatusBadRequest, slug: "malformed-request-body", title: "Malformed request body"},
+			writeProblem(w, r, problem{status: http.StatusBadRequest, slug: slugMalformedRequestBody, title: "Malformed request body"},
 				"a NUL character (U+0000) is not allowed in a query parameter")
 			return
 		}
@@ -37,12 +37,12 @@ func rejectNUL(next http.Handler) http.Handler {
 			body, err := io.ReadAll(r.Body)
 			_ = r.Body.Close()
 			if err != nil {
-				writeProblem(w, r, problem{status: http.StatusBadRequest, slug: "malformed-request-body", title: "The request body could not be read"},
+				writeProblem(w, r, problem{status: http.StatusBadRequest, slug: slugMalformedRequestBody, title: "The request body could not be read"},
 					"the request body could not be read")
 				return
 			}
 			if containsNUL(body) {
-				writeProblem(w, r, problem{status: http.StatusBadRequest, slug: "malformed-request-body", title: "The request body contains a NUL character"},
+				writeProblem(w, r, problem{status: http.StatusBadRequest, slug: slugMalformedRequestBody, title: "The request body contains a NUL character"},
 					"a NUL character (U+0000) is not allowed in a request body")
 				return
 			}

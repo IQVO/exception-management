@@ -76,18 +76,18 @@ func (w *dlqWriter) Close() error {
 	return w.writer.Close()
 }
 
-// errDeadLetter asks the run loop to dead-letter a message and commit past
+// deadLetterError asks the run loop to dead-letter a message and commit past
 // it: the deterministic refusals of a HANDLED type (a payload that never
 // decodes, a blank natural id). It wraps the cause for the dead letter's
 // header.
-type errDeadLetter struct{ cause error }
+type deadLetterError struct{ cause error }
 
-func (e *errDeadLetter) Error() string { return "kafka: dead-letter the message: " + e.cause.Error() }
-func (e *errDeadLetter) Unwrap() error { return e.cause }
+func (e *deadLetterError) Error() string { return "kafka: dead-letter the message: " + e.cause.Error() }
+func (e *deadLetterError) Unwrap() error { return e.cause }
 
 // deadLetterCause strips the marker for the header text.
 func deadLetterCause(err error) error {
-	var marker *errDeadLetter
+	var marker *deadLetterError
 	if errors.As(err, &marker) {
 		return marker.cause
 	}

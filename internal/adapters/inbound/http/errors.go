@@ -20,6 +20,10 @@ import (
 // problemBaseURI is the namespace of this service's RFC 7807 `type` URIs.
 const problemBaseURI = "https://errors.exception-management.warehouse-systems.dev/"
 
+// slugMalformedRequestBody is the slug of every malformed-body problem (the
+// catalogue entry and the NUL guard's three variants share it).
+const slugMalformedRequestBody = "malformed-request-body"
+
 // Errors the adapter itself raises, before or besides the use cases. Their
 // text never reaches a client: the catalogue pairs each with a fixed
 // (status, slug, title, detail).
@@ -100,7 +104,7 @@ var problemCatalogue = []struct {
 	err error
 	p   problem
 }{
-	{errMalformedRequest, problem{status: http.StatusBadRequest, slug: "malformed-request-body", title: "Malformed request body",
+	{errMalformedRequest, problem{status: http.StatusBadRequest, slug: slugMalformedRequestBody, title: "Malformed request body",
 		detail: "request body is not valid JSON for this operation"}},
 	{errInvalidCaseID, invalidCaseIDProblem},
 	{errInvalidSourceType, invalidSourceTypeProblem},

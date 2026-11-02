@@ -44,7 +44,7 @@ func OrderCorrelationHandlers(correlate *usecases.ConsumeCorrelation, logger *sl
 				return err
 			}
 			if d.OrderID == "" {
-				return &errDeadLetter{cause: skipf("payload of %s carries no order id", e.Type())}
+				return &deadLetterError{cause: skipf("payload of %s carries no order id", e.Type())}
 			}
 			fact := usecases.CorrelatedFact{
 				CorrelatedType:    e.Type(),

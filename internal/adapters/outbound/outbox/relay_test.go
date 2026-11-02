@@ -39,7 +39,7 @@ func (s *fakeStore) Drain(ctx context.Context, limit, maxAttempts int, handle fu
 	published := 0
 	for _, row := range rows {
 		if err, bad := failOn[row.Fact.Event]; bad {
-			return published, &appoutbox.SendFailure{RowID: row.ID, Attempts: failAttempt, Row: row, Err: err}
+			return published, &appoutbox.SendFailureError{RowID: row.ID, Attempts: failAttempt, Row: row, Err: err}
 		}
 		if err := handle(ctx, row); err != nil {
 			return published, err
