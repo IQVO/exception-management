@@ -40,8 +40,9 @@ func (uc *ListOpenExceptions) Page(ctx context.Context, f repository.CaseFilter,
 }
 
 // Execute returns EVERY matching case, newest opened first: it walks the
-// keyset pages until a short one, so the MCP tool and the A2A skill (which
-// keep their own, unpaged tool schemas) still answer complete data.
+// keyset pages until a short one, so the A2A skill (which keeps its own,
+// unpaged schema) still answers complete data. The MCP tool pages instead
+// (Paged below).
 func (uc *ListOpenExceptions) Execute(ctx context.Context, status, queue, siteID, sourceType string) ([]views.CaseView, error) {
 	f := repository.CaseFilter{Status: status, Queue: queue, SiteID: siteID, SourceType: sourceType}
 	out := []views.CaseView{}

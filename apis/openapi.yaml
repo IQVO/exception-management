@@ -209,6 +209,7 @@ paths:
       tags: [Exceptions]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ActorHeader"
       requestBody:
         required: true
         content:
@@ -250,6 +251,7 @@ paths:
       tags: [Exceptions]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ActorHeader"
       requestBody:
         required: true
         content:
@@ -292,6 +294,7 @@ paths:
       tags: [Exceptions]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ActorHeader"
       requestBody:
         required: true
         content:
@@ -513,6 +516,21 @@ components:
         type: string
         minLength: 1
         maxLength: 128
+    ActorHeader:
+      name: X-Actor
+      in: header
+      required: false
+      description: |
+        The operator identity the case's audit trail records for this
+        command (an operator id, e.g. `op-jane`). A label, not
+        authentication: the service has no auth layer (fleet decision
+        2026-09-11). Omitted (or blank) records `system`, the pre-header
+        behavior; a value with a NUL byte is 400 `invalid-actor`.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+      example: op-jane
     Limit:
       name: limit
       in: query
@@ -575,6 +593,14 @@ components:
                 title: Queue is invalid
                 status: 400
                 detail: queue must not be blank
+                instance: /exceptions/case-1/triage-decisions
+            invalidActor:
+              summary: Malformed X-Actor header
+              value:
+                type: https://errors.exception-management.warehouse-systems.dev/invalid-actor
+                title: Actor is invalid
+                status: 400
+                detail: the X-Actor header must name the operator performing the command, non-blank with no NUL byte
                 instance: /exceptions/case-1/triage-decisions
             invalidAssignee:
               summary: Blank assignee

@@ -112,7 +112,7 @@ func run() error {
 	logger := newLogger(cfg.logLevel)
 	slog.SetDefault(logger)
 
-	pool, err := openAnalyticsPool(context.Background(), logger, cfg.analyticsURL)
+	pool, err := openAnalyticsPool(context.Background(), cfg.analyticsURL)
 	if err != nil {
 		return err
 	}
@@ -212,7 +212,7 @@ func newAdminMux(notReady *atomic.Bool) *http.ServeMux {
 
 // openAnalyticsPool applies the embedded analytical migrations over the
 // direct DSN, opens the writer pool and pings it.
-func openAnalyticsPool(ctx context.Context, logger *slog.Logger, url string) (*pgxpool.Pool, error) {
+func openAnalyticsPool(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if err := analyticsstore.RunMigrations(url); err != nil {
 		return nil, fmt.Errorf("run analytics migrations: %w", err)
 	}

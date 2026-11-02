@@ -70,10 +70,10 @@ type Row struct {
 	RawPayload []byte
 }
 
-// SendFailure is the error a drain pass returns when a row's send failed: the
+// SendFailureError is the error a drain pass returns when a row's send failed: the
 // row stays in the outbox with attempts bumped and next_attempt_at pushed
 // forward, and the rows after it were left untouched.
-type SendFailure struct {
+type SendFailureError struct {
 	// RowID is the failed outbox row's id.
 	RowID int64
 	// Attempts is the row's attempts count AFTER this failure.
@@ -85,9 +85,9 @@ type SendFailure struct {
 }
 
 // Error implements error.
-func (f *SendFailure) Error() string {
+func (f *SendFailureError) Error() string {
 	return f.Err.Error()
 }
 
 // Unwrap returns the underlying send error.
-func (f *SendFailure) Unwrap() error { return f.Err }
+func (f *SendFailureError) Unwrap() error { return f.Err }

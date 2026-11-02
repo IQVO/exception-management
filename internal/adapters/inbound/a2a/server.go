@@ -43,6 +43,10 @@ type Config struct {
 	Version  string
 }
 
+// contentTypeJSON is the one content type the agent card and its skills
+// advertise (with text/plain where plain text is accepted).
+const contentTypeJSON = "application/json"
+
 // Deps is everything the A2A skills need, injected by the composition root.
 // It carries the SAME read use cases the REST and MCP adapters use and holds
 // no write use case at all (TestDepsHoldNoWriteUseCase pins it); the adapter
@@ -72,8 +76,8 @@ func Card(cfg Config) *a2a.AgentCard {
 		SupportedInterfaces: []*a2a.AgentInterface{
 			a2a.NewAgentInterface(cfg.AgentURL, a2a.TransportProtocolJSONRPC),
 		},
-		DefaultInputModes:  []string{"application/json", "text/plain"},
-		DefaultOutputModes: []string{"application/json", "text/plain"},
+		DefaultInputModes:  []string{contentTypeJSON, "text/plain"},
+		DefaultOutputModes: []string{contentTypeJSON, "text/plain"},
 		Capabilities:       a2a.AgentCapabilities{Streaming: false},
 		Skills: []a2a.AgentSkill{
 			{
@@ -81,7 +85,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				Name:        "SLA status of the open exception caseload",
 				Description: "How the open caseload sits against its SLA clocks at generatedAt: openCases, breached (open cases past their SLA due time), escalated (cases the SLA sweeper flagged) and the open counts bySeverity and byQueue. With includePolicies=true it also returns the exception policy declared for every source type (latest version, severity, queue, slaMinutes and the auto-resolve rule or null). Read-only; takes no required argument.",
 				Tags:        []string{"exceptions", "sla", "read"},
-				InputModes:  []string{"application/json"},
+				InputModes:  []string{contentTypeJSON},
 				Examples: []string{
 					`{"skill":"sla_status","arguments":{}}`,
 					`{"skill":"sla_status","arguments":{"includePolicies":true}}`,
@@ -92,7 +96,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				Name:        "Find exception cases",
 				Description: "Reads exception cases, newest opened first. Give caseId (starts with case-) to read exactly one case, or any of status (OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike), queue, siteId and sourceType (the full CloudEvents type that opened the case) to list the matching cases; caseId cannot be combined with the filters, and no argument lists every case. Each case carries its dedup identity, severity, queue, occurrenceCount, escalated flag, assignee, SLA clock (slaMinutes, slaDueAt), the frozen sourcePayload of the opening fact, the resolution once resolved and the audit trail. Read-only; an unknown caseId is answered as a 404 problem.",
 				Tags:        []string{"exceptions", "cases", "read"},
-				InputModes:  []string{"application/json"},
+				InputModes:  []string{contentTypeJSON},
 				Examples: []string{
 					`{"skill":"find_exceptions","arguments":{"status":"OPEN","queue":"ps-main"}}`,
 					`{"skill":"find_exceptions","arguments":{"caseId":"case-1b4e28ba"}}`,

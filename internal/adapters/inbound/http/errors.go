@@ -15,10 +15,15 @@ import (
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/exceptionpolicy"
+	"github.com/claudioed/exception-management/internal/domain/shared"
 )
 
 // problemBaseURI is the namespace of this service's RFC 7807 `type` URIs.
 const problemBaseURI = "https://errors.exception-management.warehouse-systems.dev/"
+
+// slugMalformedRequestBody is the slug of every malformed-body problem (the
+// catalogue entry and the NUL guard's three variants share it).
+const slugMalformedRequestBody = "malformed-request-body"
 
 // Errors the adapter itself raises, before or besides the use cases. Their
 // text never reaches a client: the catalogue pairs each with a fixed
@@ -87,6 +92,8 @@ var (
 		"queue must not be blank"}
 	invalidAssigneeProblem = problem{http.StatusBadRequest, "invalid-assignee", "Assignee is invalid",
 		"assignee must not be blank"}
+	invalidActorProblem = problem{http.StatusBadRequest, "invalid-actor", "Actor is invalid",
+		"the X-Actor header must name the operator performing the command, non-blank with no NUL byte"}
 	invalidResolutionProblem = problem{http.StatusBadRequest, "invalid-resolution", "Resolution is invalid",
 		"resolutionCode and rootCause must not be blank"}
 	invalidPolicyProblem = problem{http.StatusBadRequest, "invalid-policy", "Policy is invalid",
@@ -100,7 +107,7 @@ var problemCatalogue = []struct {
 	err error
 	p   problem
 }{
-	{errMalformedRequest, problem{status: http.StatusBadRequest, slug: "malformed-request-body", title: "Malformed request body",
+	{errMalformedRequest, problem{status: http.StatusBadRequest, slug: slugMalformedRequestBody, title: "Malformed request body",
 		detail: "request body is not valid JSON for this operation"}},
 	{errInvalidCaseID, invalidCaseIDProblem},
 	{errInvalidSourceType, invalidSourceTypeProblem},
@@ -125,6 +132,7 @@ var problemCatalogue = []struct {
 	{exceptioncase.ErrBlankQueue, invalidQueueProblem},
 	{exceptionpolicy.ErrBlankQueue, invalidQueueProblem},
 	{exceptioncase.ErrBlankAssignee, invalidAssigneeProblem},
+	{shared.ErrBlankActor, invalidActorProblem},
 	{exceptioncase.ErrBlankResolutionCode, invalidResolutionProblem},
 	{exceptioncase.ErrBlankRootCause, invalidResolutionProblem},
 	{exceptionpolicy.ErrInvalidSourceType, invalidSourceTypeProblem},

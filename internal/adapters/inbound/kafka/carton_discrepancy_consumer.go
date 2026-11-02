@@ -45,7 +45,7 @@ func CartonDiscrepancyHandlers(open *usecases.OpenCartonDiscrepancy, logger *slo
 			if err != nil {
 				switch {
 				case errors.Is(err, shared.ErrBlankSourceSubject):
-					return &errDeadLetter{cause: skipf("payload of %s carries no mappable id: %v", e.Type(), err)}
+					return &deadLetterError{cause: skipf("payload of %s carries no mappable id: %v", e.Type(), err)}
 				case errors.Is(err, usecases.ErrPolicyUndeclared), errors.Is(err, usecases.ErrNoEventID):
 					return skipf("%s: %v", e.Type(), err)
 				}
