@@ -151,6 +151,11 @@ paths:
         "405":
           description: Case creation does not exist; every case comes from a consumed fact.
           headers:
+            Allow:
+              description: The methods the resource accepts; always `GET`.
+              schema:
+                type: string
+                enum: [GET]
             Idempotency-Replayed:
               $ref: "#/components/headers/IdempotencyReplayed"
           content:
@@ -161,7 +166,7 @@ paths:
                 type: https://errors.exception-management.warehouse-systems.dev/method-not-allowed
                 title: Method not allowed
                 status: 405
-                detail: there is deliberately no POST /exceptions; every case opens from a consumed fact (ADR 0001)
+                detail: "there is deliberately no POST /exceptions: every case opens from a consumed fact (ADR 0001)"
                 instance: /exceptions
 
   /exceptions/{caseId}:
@@ -361,8 +366,9 @@ paths:
         Declares the handling policy of a source type at the next version
         (versions are append-only: the first declaration is version 1, every
         accepted declaration after that is +1). `sourceType` is the full
-        CloudEvents type of the governed source fact and must match a source
-        this service consumes. The new version governs cases opened after the
+        CloudEvents type of the governed source fact; the service checks its
+        shape only (`com.warehouse.wms|wes.<context>.<entity>.<Event>`), not
+        that a consumer for it exists. The new version governs cases opened after the
         declaration; open cases keep the severity, queue and SLA they were
         opened with. `autoResolve` is omitted or null when the source type has
         no auto-resolve rule. Requires an `Idempotency-Key`. Publishes
@@ -386,12 +392,17 @@ paths:
       responses:
         "201":
           description: The policy version is declared.
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExceptionPolicy"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -454,7 +465,7 @@ paths:
         "200":
           description: The metrics of the process.
           content:
-            text/plain:
+            text/plain; version=0.0.4; charset=utf-8:
               schema:
                 type: string
 
@@ -792,8 +803,9 @@ components:
           description: Why it happened (a code, not prose).
         note:
           type: string
+          nullable: true
           maxLength: 2000
-          description: Free-form remark; omitted when none.
+          description: Free-form remark; omitted or null when none.
 
     AutoResolveRule:
       type: object
@@ -802,6 +814,8 @@ components:
       properties:
         onType:
           type: string
+          maxLength: 200
+          pattern: "^com\\.warehouse\\.(wms|wes)\\.[a-z][a-z-]*\\.[a-z][a-z-]*\\.[A-Za-z0-9.]+$"
           description: "The full CloudEvents type of the correlated fact that closes the case (e.g. OrderRepromised)."
         withinMinutes:
           type: integer
@@ -863,7 +877,7 @@ components:
         assignee: { type: string, description: The owning operator id; absent before the first assignment. }
         resolutionCode: { type: string, description: Absent until RESOLVED. }
         rootCause: { type: string, description: Absent until RESOLVED. }
-        note: { type: string, description: Absent until RESOLVED; null when resolved without a note. }
+        note: { type: string, nullable: true, description: Absent until RESOLVED; null when resolved without a note. }
         resolvedAt: { type: string, format: date-time, description: Absent until the case is resolved or auto-resolved. }
         autoResolveRuleId: { type: string, description: "The rule that fired, present only on an auto-resolved case." }
         openedAt: { type: string, format: date-time }
@@ -904,7 +918,7 @@ components:
     Problem:
       type: object
       description: RFC 7807 problem document used for every non-2xx response.
-      required: [type, title, status, detail]
+      required: [type, title, status, detail, instance]
       properties:
         type: { type: string, format: uri }
         title: { type: string }
