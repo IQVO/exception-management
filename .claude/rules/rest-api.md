@@ -11,9 +11,9 @@ Route -> use case, kept in sync with `apis/openapi.yaml`.
 
 - `GET  /exceptions?status=&queue=&site=&sourceType=` -> `ListOpenExceptions` (200 + `[]`, never 404 on a list)
 - `GET  /exceptions/{caseId}`                          -> `GetException`
-- `POST /exceptions/{caseId}/triage`                   -> `TriageException` (200; body `{severity, queue}`)
-- `POST /exceptions/{caseId}/assign`                   -> `AssignException` (200; body `{assignee}`)
-- `POST /exceptions/{caseId}/resolve`                  -> `ResolveException` (200; body `{resolutionCode, rootCause, note}`; 409 `case-already-resolved`)
+- `POST /exceptions/{caseId}/triage-decisions`                   -> `TriageException` (200; body `{severity, queue}`)
+- `POST /exceptions/{caseId}/assignments`                   -> `AssignException` (200; body `{assignee}`)
+- `POST /exceptions/{caseId}/resolutions`                  -> `ResolveException` (200; body `{resolutionCode, rootCause, note}`; 409 `case-already-resolved`)
 - `PUT  /exception-policies/{sourceType}`              -> `DeclareExceptionPolicy` (201)
 - `GET  /exception-policies`                           -> reads
 - `GET  /healthz`, `GET /readyz` (drain gate + Postgres ping + Kafka metadata), `GET /metrics`
