@@ -29,6 +29,45 @@ Every tool is annotated read-only, idempotent and closed-world. `TestToolSurface
 and the exact registry is pinned by a golden file
 (`internal/adapters/inbound/mcp/testdata/tool_registry.golden.json`).
 
+## Agent authority levels
+
+Every tool declares its authority level (Agentic Standard v2, fleet rule `agent-authority`; see
+[ADR 0009](/docs/adr/0009-agent-authority-levels-and-complete-mcp-surface)) in `tools/list`
+`_meta` under `com.warehouse/authority`. The whole surface here is **L1** — pure reads of this
+context's own state; nothing recommends (L2), nothing writes (L3), and L4 is not granted. The two
+A2A skills carry the same level as the tag `authority:L1`. The level is a label for callers; it is
+not access control.
+
+| Tool | Authority |
+| --- | --- |
+| `list_open_exceptions` | `L1` |
+| `get_exception` | `L1` |
+| `get_exception_policies` | `L1` |
+| `get_sla_report` | `L1` |
+
+Two sensors enforce it in CI: the static `internal/architecture/mcp_authority_fitness_test.go`
+(template copy) and the runtime-wired `TestEveryAgentToolDeclaresAuthority` in both adapter
+packages.
+
+## Stateless transport
+
+The Streamable HTTP handler is **stateless** (`StreamableHTTPOptions{Stateless: true}`): no
+`Mcp-Session-Id` is issued, the server answers the 2026-07-28 revision's per-request handshake
+(`server/discover`), and a legacy `initialize` still answers 200. `stateless_test.go` pins the
+three wire facts with raw POSTs.
+
+## Resource
+
+`warehouse://exception-management/sla-report` — the SLA report read model (open, breached,
+escalated, by severity and queue) as one bounded JSON document, built from the same
+`GetSLAReport` use case as `get_sla_report`; never a table dump.
+
+## Prompt
+
+`triage_exception_caseload` — the operator SOP: read the SLA report, list the cases behind the
+breaches, check the declared policies, and recommend which cases a human triages, assigns or
+resolves first. It names the read tools but never calls them; writes stay on REST.
+
 ### `list_open_exceptions`
 
 List the exception cases, newest opened first, narrowed by the optional filters. Each case carries

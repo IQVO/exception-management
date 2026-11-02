@@ -76,7 +76,12 @@ from `warehouse-harness-template` (v4); guides in `.claude/rules/`, sensors in
 - A bounded sweeper flags SLA breaches (`ExceptionEscalated`) without
   blocking work.
 - Publishes case facts through a transactional outbox; exposes read-only MCP
-  tools for warehouse-ops-agent (which stays zero-write).
+  tools for warehouse-ops-agent (which stays zero-write). Every MCP tool
+  declares its agent authority level (all `L1` reads, in `tools/list`
+  `_meta`) and every A2A skill carries an `authority:L1` tag (ADR 0009); the
+  MCP server is stateless and also answers the 2026-07-28 MCP revision,
+  serving one resource (`warehouse://exception-management/sla-report`) and
+  the `triage_exception_caseload` operator prompt.
 - Answers delegated goals over A2A (`cmd/a2a`, read-only: `sla_status`,
   `find_exceptions`); see
   [Running the A2A agent in Kubernetes](#running-the-a2a-agent-in-kubernetes).
