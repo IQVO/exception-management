@@ -11,6 +11,38 @@ import (
 	"github.com/claudioed/exception-management/internal/application/views"
 )
 
+// Authority levels (Agentic Standard v2, AS-1). Every registered tool
+// declares exactly one of these in its Meta under authorityMetaKey; the fleet
+// rule is agent-authority (warehouse-docs agents/fleet/agent-authority.md).
+// This surface is read-only, so every tool here is L1 (a pure read of this
+// context's own state); L4 is never granted in this context.
+const (
+	// authorityMetaKey is the tools/list _meta key carrying a tool's level.
+	authorityMetaKey = "com.warehouse/authority"
+	// authorityL1 reads facts and changes nothing.
+	authorityL1 = "L1"
+	// authorityL2 is a pure recommendation: computes a proposal, changes
+	// nothing. Unused here today (this surface is read-only) but part of the
+	// fleet's pinned declaration vocabulary.
+	//
+	//nolint:unused // the fleet vocabulary is L1..L4 (contracts G1); L2/L3/L4 name the levels a future tool may declare.
+	authorityL2 = "L2"
+	// authorityL3 mutates state; the caller is accountable.
+	//
+	//nolint:unused // the fleet vocabulary is L1..L4 (contracts G1); L2/L3/L4 name the levels a future tool may declare.
+	authorityL3 = "L3"
+	// authorityL4 acts autonomously; only an ADR in the owning context grants
+	// it.
+	//
+	//nolint:unused // the fleet vocabulary is L1..L4 (contracts G1); L2/L3/L4 name the levels a future tool may declare.
+	authorityL4 = "L4"
+)
+
+// authorityMeta is the Meta a tool registers to declare its authority level.
+//
+//nolint:unparam // every tool here is L1 today; the level parameter keeps the pinned fleet shape authorityMeta(authorityLn).
+func authorityMeta(level string) mcp.Meta { return mcp.Meta{authorityMetaKey: level} }
+
 // Deps is everything the MCP tools need, injected by the composition root.
 // It carries the SAME read use cases the REST adapter uses (GET /exceptions,
 // GET /exceptions/{caseId}, GET /exception-policies and the SLA report read
@@ -213,8 +245,9 @@ func (d Deps) getSLAReport(ctx context.Context, _ struct{}) (slaReportView, erro
 // read-only, idempotent and closed-world; TestToolSurface pins the set and
 // fails the build on any write-verb name.
 func (d Deps) registerTools(server *mcp.Server) {
+	// The annotations stay a per-tool literal (not a shared variable) so the
+	// static authority sensor in internal/architecture can read ReadOnlyHint.
 	closedWorld := false
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld}
 
 	addTool(server, &mcp.Tool{
 		Name: "list_open_exceptions",
@@ -225,7 +258,9 @@ func (d Deps) registerTools(server *mcp.Server) {
 			"(how often the same exception happened), escalated flag, assignee when one exists, the SLA clock " +
 			"(sla_minutes, sla_due_at), the frozen source_payload of the opening fact and the audit trail of accepted " +
 			"transitions. Read-only.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		// A pure read of this context's own state.
+		Meta: authorityMeta(authorityL1),
 	}, d.listOpenExceptions)
 
 	addTool(server, &mcp.Tool{
@@ -235,7 +270,9 @@ func (d Deps) registerTools(server *mcp.Server) {
 			"resolution (resolution_code, root_cause, note, resolved_at) once resolved — manually or auto-resolved, " +
 			"which also carries auto_resolve_rule_id and the correlated event — and the audit trail. Read-only; fails " +
 			"with case-not-found for an unknown id and invalid-case-id for a blank one.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		// A pure read of this context's own state.
+		Meta: authorityMeta(authorityL1),
 	}, d.getException)
 
 	addTool(server, &mcp.Tool{
@@ -244,7 +281,9 @@ func (d Deps) registerTools(server *mcp.Server) {
 			"version, the severity and queue a new case of that type opens with, sla_minutes, and auto_resolve — " +
 			"null when the type has no rule, else {on_type, within_minutes}, the correlated CloudEvents type and " +
 			"window within which it auto-resolves the case. Read-only.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		// A pure read of this context's own state.
+		Meta: authorityMeta(authorityL1),
 	}, d.getExceptionPolicies)
 
 	addTool(server, &mcp.Tool{
@@ -252,7 +291,9 @@ func (d Deps) registerTools(server *mcp.Server) {
 		Description: "Read how the open caseload sits against its SLA clocks at generated_at: open_cases, breached " +
 			"(open cases past their sla_due_at), escalated (cases the SLA sweeper flagged) and the open counts " +
 			"by_severity and by_queue. Read-only.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		// A pure read of this context's own state (the SLA report read model).
+		Meta: authorityMeta(authorityL1),
 	}, d.getSLAReport)
 }
 

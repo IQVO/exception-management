@@ -84,7 +84,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				ID:          skillSLAStatus,
 				Name:        "SLA status of the open exception caseload",
 				Description: "How the open caseload sits against its SLA clocks at generatedAt: openCases, breached (open cases past their SLA due time), escalated (cases the SLA sweeper flagged) and the open counts bySeverity and byQueue. With includePolicies=true it also returns the exception policy declared for every source type (latest version, severity, queue, slaMinutes and the auto-resolve rule or null). Read-only; takes no required argument.",
-				Tags:        []string{"exceptions", "sla", "read"},
+				Tags:        []string{"exceptions", "sla", "read", "authority:L1"},
 				InputModes:  []string{contentTypeJSON},
 				Examples: []string{
 					`{"skill":"sla_status","arguments":{}}`,
@@ -95,7 +95,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				ID:          skillFindExceptions,
 				Name:        "Find exception cases",
 				Description: "Reads exception cases, newest opened first. Give caseId (starts with case-) to read exactly one case, or any of status (OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike), queue, siteId and sourceType (the full CloudEvents type that opened the case) to list the matching cases; caseId cannot be combined with the filters, and no argument lists every case. Each case carries its dedup identity, severity, queue, occurrenceCount, escalated flag, assignee, SLA clock (slaMinutes, slaDueAt), the frozen sourcePayload of the opening fact, the resolution once resolved and the audit trail. Read-only; an unknown caseId is answered as a 404 problem.",
-				Tags:        []string{"exceptions", "cases", "read"},
+				Tags:        []string{"exceptions", "cases", "read", "authority:L1"},
 				InputModes:  []string{contentTypeJSON},
 				Examples: []string{
 					`{"skill":"find_exceptions","arguments":{"status":"OPEN","queue":"ps-main"}}`,
