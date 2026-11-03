@@ -128,6 +128,11 @@ const sidebars: SidebarsConfig = {
           label: '0008 Adopt the fleet REST API guideline',
           href: '/docs/adr/0008-adopt-the-fleet-rest-api-guideline',
         },
+        {
+          type: 'link',
+          label: '0009 Agent authority levels and complete MCP surface',
+          href: '/docs/adr/0009-agent-authority-levels-and-complete-mcp-surface',
+        },
       ],
     },
   ],
