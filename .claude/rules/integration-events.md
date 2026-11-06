@@ -9,7 +9,7 @@ paths:
 
 This service PUBLISHES on `warehouse.exception-management.events` (integration)
 and `warehouse.exception-management.analytics` (its own projector only), and
-CONSUMES the exception-class facts of six sibling contexts into local, frozen
+CONSUMES the exception-class facts of nine sibling contexts into local, frozen
 copies on the case. It never calls a sibling over REST or MCP. Type prefix
 `com.warehouse.wes.exception-management.`, source `/warehouse/exception-management`.
 
@@ -89,10 +89,16 @@ standard page). Record this repo's own envelope decisions as ADRs under
 | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | inventory-storage | after its promotion PR |
 | `com.warehouse.wes.fulfillment-execution.package.PackageDiverted` | `warehouse.fulfillment.events` | fulfillment-execution | after its promotion PR |
 | `com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected` | `warehouse.fulfillment.events` | fulfillment-execution | after its promotion PR |
+| `com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | inbound-receiving | yes (ADR 0006) |
+| `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | `warehouse.yard-management.events` | yard-management | pinned consumer-first (ADR 0010) |
+| `com.warehouse.wms.yard-management.trailer.SealExceptionRaised` | `warehouse.yard-management.events` | yard-management | pinned consumer-first (ADR 0010) |
+| `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | yard-management | pinned consumer-first (ADR 0010) |
+| `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | yard-management | pinned consumer-first (ADR 0010); one case per discrepancy |
+| `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | dock-scheduling | pinned consumer-first (ADR 0010) |
 
 Planned, not built (analytics-topic only today): workforce-management `PathUnderstaffed`, network-inventory-planning `TransferStuckDetected`.
 
-Consumer groups (env, no default, boot error when unset): `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`, `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `ORDER_CORRELATION_CONSUMER_GROUP`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`, `RETURNS_EXCEPTIONS_CONSUMER_GROUP`.
+Consumer groups (env, no default, boot error when unset): `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`, `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `ORDER_CORRELATION_CONSUMER_GROUP`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`, `RETURNS_EXCEPTIONS_CONSUMER_GROUP`, `CARTON_DISCREPANCY_CONSUMER_GROUP`, `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP`, `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP`.
 
 ## Consumer group id
 

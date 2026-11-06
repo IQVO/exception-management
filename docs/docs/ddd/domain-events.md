@@ -85,6 +85,11 @@ skipped (WARN, commit past).
 | `wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | receipt id + sscc or `-` + kind | One case per (receipt, sscc, kind); UnlabelledCarton/CartonOverLimit route to receiving-lead, every other kind to problem-solve (ADR 0006) |
 | `wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | bin id | Promoted by the producer (PR #239, merged 2026-10-21) |
 | `wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | stock unit id | Same promotion |
+| `wms.yard-management.yardvisit.VisitRejected` | `warehouse.yard-management.events` | visit id | One case per rejected visit; default queue `yard-supervisor` (ADR 0010) |
+| `wms.yard-management.trailer.SealExceptionRaised` | `warehouse.yard-management.events` | trailer id + `raised_at` | A later raise for the same trailer is its own case; the same raise re-published touches (ADR 0010) |
+| `wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | trailer id + CloudEvents time | The payload carries no instant of its own (ADR 0010) |
+| `wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | yard check id + kind + location + trailer id, unit number or `-` | One case per discrepancy, one claimed event id for the whole check (ADR 0010) |
+| `wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | appointment id | One case per appointment; default queue `dock-planner` (ADR 0010) |
 | `wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | — | **Correlation only, never a case source**: the correlated fact of the auto-resolve rule |
 
 **Not consumed (roadmap):** workforce-management `PathUnderstaffed`,

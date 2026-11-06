@@ -24,6 +24,8 @@ data:
   INVENTORY_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.inventoryExceptionsConsumerGroup to be set (INVENTORY_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.inventoryExceptionsConsumerGroup | quote }}
   RETURNS_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.returnsExceptionsConsumerGroup to be set (RETURNS_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.returnsExceptionsConsumerGroup | quote }}
   CARTON_DISCREPANCY_CONSUMER_GROUP: {{ required "exception-management requires config.cartonDiscrepancyConsumerGroup to be set (CARTON_DISCREPANCY_CONSUMER_GROUP)" .Values.config.cartonDiscrepancyConsumerGroup | quote }}
+  YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.yardManagementExceptionsConsumerGroup to be set (YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.yardManagementExceptionsConsumerGroup | quote }}
+  DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP: {{ required "exception-management requires config.dockSchedulingExceptionsConsumerGroup to be set (DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP)" .Values.config.dockSchedulingExceptionsConsumerGroup | quote }}
   {{- with .Values.config.outboxRelayInterval }}
   OUTBOX_RELAY_INTERVAL: {{ . | quote }}
   {{- end }}

@@ -45,11 +45,14 @@ env_value() { # env_value <rendered> <NAME>
 [[ "$(env_value "$deployment" INVENTORY_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-inventory" ]] || fail "INVENTORY_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.inventoryExceptionsConsumerGroup"
 [[ "$(env_value "$deployment" RETURNS_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-returns" ]] || fail "RETURNS_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.returnsExceptionsConsumerGroup"
 [[ "$(env_value "$deployment" CARTON_DISCREPANCY_CONSUMER_GROUP)" == "exception-management-carton-discrepancy" ]] || fail "CARTON_DISCREPANCY_CONSUMER_GROUP is not rendered from config.cartonDiscrepancyConsumerGroup"
+[[ "$(env_value "$deployment" YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-yard-management" ]] || fail "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.yardManagementExceptionsConsumerGroup"
+[[ "$(env_value "$deployment" DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-dock-scheduling" ]] || fail "DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.dockSchedulingExceptionsConsumerGroup"
 grep -A4 'name: DATABASE_URL$' <<<"$deployment" | grep -q 'secretKeyRef:' || fail "DATABASE_URL must come from a Secret (secretKeyRef)"
 grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$deployment" | grep -q 'optional: true' || fail "MIGRATIONS_DATABASE_URL must be an optional secretKeyRef"
 for var in KAFKA_BROKERS FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP \
   NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP ORDER_CORRELATION_CONSUMER_GROUP \
-  INVENTORY_EXCEPTIONS_CONSUMER_GROUP RETURNS_EXCEPTIONS_CONSUMER_GROUP CARTON_DISCREPANCY_CONSUMER_GROUP; do
+  INVENTORY_EXCEPTIONS_CONSUMER_GROUP RETURNS_EXCEPTIONS_CONSUMER_GROUP CARTON_DISCREPANCY_CONSUMER_GROUP \
+  YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP; do
   grep -q "^  $var: " <<<"$configmap" || fail "the ConfigMap does not carry $var"
 done
 if grep -qE '^  (MIGRATIONS_)?DATABASE_URL:' <<<"$configmap"; then fail "a DSN must never land in the ConfigMap"; fi
@@ -62,7 +65,9 @@ renamed="$(render_only deployment.yaml "${base[@]}" \
   --set config.orderCorrelationConsumerGroup=g-oc \
   --set config.inventoryExceptionsConsumerGroup=g-inv \
   --set config.returnsExceptionsConsumerGroup=g-ret \
-  --set config.cartonDiscrepancyConsumerGroup=g-carton)"
+  --set config.cartonDiscrepancyConsumerGroup=g-carton \
+  --set config.yardManagementExceptionsConsumerGroup=g-yard \
+  --set config.dockSchedulingExceptionsConsumerGroup=g-dock)"
 [[ "$(env_value "$renamed" FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP)" == "g-ff" ]] || fail "config.fulfillmentExceptionsConsumerGroup does not reach FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP)" == "g-wp" ]] || fail "config.workPlanningExceptionsConsumerGroup does not reach WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP)" == "g-nf" ]] || fail "config.networkFulfillmentExceptionsConsumerGroup does not reach NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP"
@@ -70,6 +75,8 @@ renamed="$(render_only deployment.yaml "${base[@]}" \
 [[ "$(env_value "$renamed" INVENTORY_EXCEPTIONS_CONSUMER_GROUP)" == "g-inv" ]] || fail "config.inventoryExceptionsConsumerGroup does not reach INVENTORY_EXCEPTIONS_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" RETURNS_EXCEPTIONS_CONSUMER_GROUP)" == "g-ret" ]] || fail "config.returnsExceptionsConsumerGroup does not reach RETURNS_EXCEPTIONS_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" CARTON_DISCREPANCY_CONSUMER_GROUP)" == "g-carton" ]] || fail "config.cartonDiscrepancyConsumerGroup does not reach CARTON_DISCREPANCY_CONSUMER_GROUP"
+[[ "$(env_value "$renamed" YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP)" == "g-yard" ]] || fail "config.yardManagementExceptionsConsumerGroup does not reach YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP"
+[[ "$(env_value "$renamed" DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP)" == "g-dock" ]] || fail "config.dockSchedulingExceptionsConsumerGroup does not reach DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP"
 
 # --- no in-memory / permissive mode, ever ------------------------------------
 no_mode() { # no_mode <label> <rendered>
@@ -189,6 +196,8 @@ expect_refusal "an empty order-correlation group" "config.orderCorrelationConsum
 expect_refusal "an empty inventory group" "config.inventoryExceptionsConsumerGroup" "${base[@]}" --set config.inventoryExceptionsConsumerGroup=
 expect_refusal "an empty returns group" "config.returnsExceptionsConsumerGroup" "${base[@]}" --set config.returnsExceptionsConsumerGroup=
 expect_refusal "an empty carton-discrepancy group" "config.cartonDiscrepancyConsumerGroup" "${base[@]}" --set config.cartonDiscrepancyConsumerGroup=
+expect_refusal "an empty yard-management group" "config.yardManagementExceptionsConsumerGroup" "${base[@]}" --set config.yardManagementExceptionsConsumerGroup=
+expect_refusal "an empty dock-scheduling group" "config.dockSchedulingExceptionsConsumerGroup" "${base[@]}" --set config.dockSchedulingExceptionsConsumerGroup=
 expect_refusal "a short grace period" "terminationGracePeriodSeconds" "${base[@]}" --set terminationGracePeriodSeconds=20
 expect_refusal "a *_MODE variable through extraEnv" "_MODE" "${base[@]}" --set 'extraEnv[0].name=EXCEPTIONS_MODE' --set 'extraEnv[0].value=permissive'
 expect_refusal "a *_MODE variable through mcp.extraEnv" "_MODE" "${base[@]}" --set mcp.enabled=true --set 'mcp.extraEnv[0].name=MCP_MODE' --set 'mcp.extraEnv[0].value=stdio'

@@ -13,7 +13,7 @@ Runtime: real Postgres and real Kafka only. Brokers: {{ .Values.kafka.brokers }}
 Exception events are relayed from the transactional outbox onto
 warehouse.exception-management.events.
 
-The six fact consumers are always ON (no *_MODE exists in this service):
+The eight fact consumers are always ON (no *_MODE exists in this service):
   group {{ .Values.config.fulfillmentExceptionsConsumerGroup }}     <- warehouse.fulfillment.events
   group {{ .Values.config.workPlanningExceptionsConsumerGroup }}        <- warehouse.work-planning.events
   group {{ .Values.config.networkFulfillmentExceptionsConsumerGroup }} <- warehouse.network-fulfillment.events
@@ -21,6 +21,8 @@ The six fact consumers are always ON (no *_MODE exists in this service):
   group {{ .Values.config.inventoryExceptionsConsumerGroup }}         <- warehouse.inventory.events
   group {{ .Values.config.returnsExceptionsConsumerGroup }}           <- warehouse.returns-processing.events
   group {{ .Values.config.cartonDiscrepancyConsumerGroup }}           <- warehouse.inbound-receiving.events
+  group {{ .Values.config.yardManagementExceptionsConsumerGroup }}    <- warehouse.yard-management.events
+  group {{ .Values.config.dockSchedulingExceptionsConsumerGroup }}    <- warehouse.dock-scheduling.events (DockAppointmentNoShow only)
 
 /readyz answers 503 until Postgres answers and a Kafka broker answers a
 metadata request. Topics are not checked: the relay's writer auto-creates the

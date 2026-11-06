@@ -17,7 +17,7 @@ and frontend (the exceptions_mfe Module Federation remote, default off). The
 enabled renders run the components TOGETHER.
 
 It also asserts the real runtime: the mandatory env (database secret, brokers,
-the six pinned consumer-group ids) is rendered, no *_MODE variable is ever
+the nine pinned consumer-group ids) is rendered, no *_MODE variable is ever
 rendered (this service has no modes), and unset optional values stay absent so
 the binary's defaults apply. The frontend is a static nginx pod: it carries NO
 env at all (never a DSN, never brokers, never a consumer group).
@@ -57,6 +57,7 @@ API_ENV = (
     "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
     "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
     "CARTON_DISCREPANCY_CONSUMER_GROUP",
+    "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP",
     "OUTBOX_RELAY_INTERVAL", "OUTBOX_MAX_ATTEMPTS", "SLA_SWEEP_INTERVAL", "SHUTDOWN_DRAIN_DELAY",
 )
 # Env that must stay off with default values so the binary's defaults apply.
@@ -181,6 +182,7 @@ def check_mcp(dep: dict | None, failures: list[str]) -> None:
         "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
         "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
     "CARTON_DISCREPANCY_CONSUMER_GROUP",
+        "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP",
     } & env
     stray.update(mode_names(env_names(dep)))
     if stray:
@@ -204,6 +206,7 @@ def check_a2a(dep: dict | None, failures: list[str]) -> None:
         "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
         "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
         "CARTON_DISCREPANCY_CONSUMER_GROUP",
+        "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP",
     } & env
     stray.update(mode_names(env_names(dep)))
     if stray:
@@ -238,6 +241,8 @@ def check_env(api: dict, failures: list[str]) -> None:
         ("INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "exception-management-inventory"),
         ("RETURNS_EXCEPTIONS_CONSUMER_GROUP", "exception-management-returns"),
         ("CARTON_DISCREPANCY_CONSUMER_GROUP", "exception-management-carton-discrepancy"),
+        ("YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "exception-management-yard-management"),
+        ("DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP", "exception-management-dock-scheduling"),
         ("OUTBOX_RELAY_INTERVAL", "500ms"),
         ("SLA_SWEEP_INTERVAL", "45s"),
         ("SHUTDOWN_DRAIN_DELAY", "5s"),
@@ -275,6 +280,8 @@ def check_refusals(failures: list[str]) -> None:
         ("an empty inventory group", BASE + ["--set", "config.inventoryExceptionsConsumerGroup="], "config.inventoryExceptionsConsumerGroup"),
         ("an empty returns group", BASE + ["--set", "config.returnsExceptionsConsumerGroup="], "config.returnsExceptionsConsumerGroup"),
         ("an empty carton-discrepancy group", BASE + ["--set", "config.cartonDiscrepancyConsumerGroup="], "config.cartonDiscrepancyConsumerGroup"),
+        ("an empty yard-management group", BASE + ["--set", "config.yardManagementExceptionsConsumerGroup="], "config.yardManagementExceptionsConsumerGroup"),
+        ("an empty dock-scheduling group", BASE + ["--set", "config.dockSchedulingExceptionsConsumerGroup="], "config.dockSchedulingExceptionsConsumerGroup"),
         ("a *_MODE variable through extraEnv",
          BASE + ["--set", "extraEnv[0].name=EXCEPTIONS_MODE", "--set", "extraEnv[0].value=permissive"], "EXCEPTIONS_MODE"),
         ("a *_MODE variable through mcp.extraEnv",

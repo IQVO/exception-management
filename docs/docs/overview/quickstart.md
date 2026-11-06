@@ -32,6 +32,9 @@ export NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP="local-network-fulfillment"
 export ORDER_CORRELATION_CONSUMER_GROUP="local-order-correlation"
 export INVENTORY_EXCEPTIONS_CONSUMER_GROUP="local-inventory"
 export RETURNS_EXCEPTIONS_CONSUMER_GROUP="local-returns"
+export CARTON_DISCREPANCY_CONSUMER_GROUP="local-carton-discrepancy"
+export YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP="local-yard-management"
+export DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP="local-dock-scheduling"
 go run ./cmd/api
 ```
 
