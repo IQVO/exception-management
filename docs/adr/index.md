@@ -23,3 +23,4 @@ section.
 | [0007](/docs/adr/0007-a2a-inbound-adapter) | A2A inbound adapter (read-only third driving adapter) | Accepted (2026-10-29) |
 | [0008](/docs/adr/0008-adopt-the-fleet-rest-api-guideline) | Adopt the fleet REST API guideline | Accepted (2026-11-01) |
 | [0009](/docs/adr/0009-agent-authority-levels-and-complete-mcp-surface) | Agent authority levels and complete MCP surface | Accepted (2026-11-02) |
+| [0010](/docs/adr/0010-package-missed-load-consumer) | PackageMissedLoad consumer | Accepted (2026-11-06) |

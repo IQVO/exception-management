@@ -9,8 +9,8 @@ paths:
 
 This service PUBLISHES on `warehouse.exception-management.events` (integration)
 and `warehouse.exception-management.analytics` (its own projector only), and
-CONSUMES the exception-class facts of six sibling contexts into local, frozen
-copies on the case. It never calls a sibling over REST or MCP. Type prefix
+CONSUMES the exception-class facts of eight sibling contexts into local,
+frozen copies on the case. It never calls a sibling over REST or MCP. Type prefix
 `com.warehouse.wes.exception-management.`, source `/warehouse/exception-management`.
 
 ## Events: CloudEvents 1.0 is MANDATORY
@@ -89,10 +89,11 @@ standard page). Record this repo's own envelope decisions as ADRs under
 | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | inventory-storage | after its promotion PR |
 | `com.warehouse.wes.fulfillment-execution.package.PackageDiverted` | `warehouse.fulfillment.events` | fulfillment-execution | after its promotion PR |
 | `com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected` | `warehouse.fulfillment.events` | fulfillment-execution | after its promotion PR |
+| `com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | outbound-shipping | yes (ADR 0010) |
 
 Planned, not built (analytics-topic only today): workforce-management `PathUnderstaffed`, network-inventory-planning `TransferStuckDetected`.
 
-Consumer groups (env, no default, boot error when unset): `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`, `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `ORDER_CORRELATION_CONSUMER_GROUP`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`, `RETURNS_EXCEPTIONS_CONSUMER_GROUP`.
+Consumer groups (env, no default, boot error when unset): `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`, `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `ORDER_CORRELATION_CONSUMER_GROUP`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`, `RETURNS_EXCEPTIONS_CONSUMER_GROUP`, `CARTON_DISCREPANCY_CONSUMER_GROUP`, `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`.
 
 ## Consumer group id
 
