@@ -182,6 +182,7 @@ per ADR 0003):
 | `warehouse.inventory.events` | `DiscrepancyDetected`, `ItemUnlocated` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` |
 | `warehouse.returns-processing.events` | `UnexpectedReturnReceived` | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` |
 | `warehouse.inbound-receiving.events` | `CartonDiscrepancyRaised` (ADR 0006) | `CARTON_DISCREPANCY_CONSUMER_GROUP` |
+| `warehouse.outbound-shipping.events` | `PackageMissedLoad` (ADR 0010) | `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` |
 
 The projector consumes `warehouse.exception-management.analytics` under
 `ANALYTICS_CONSUMER_GROUP` and dead-letters poison rows to
@@ -208,6 +209,7 @@ export ORDER_CORRELATION_CONSUMER_GROUP=ex-local-order-correlation
 export INVENTORY_EXCEPTIONS_CONSUMER_GROUP=ex-local-inventory
 export RETURNS_EXCEPTIONS_CONSUMER_GROUP=ex-local-returns
 export CARTON_DISCREPANCY_CONSUMER_GROUP=ex-local-carton-discrepancy
+export OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP=ex-local-outbound-shipping
 go run ./cmd/api              # migrations run automatically at startup; listens on :8080
 ```
 
@@ -219,7 +221,7 @@ go run ./cmd/api              # migrations run automatically at startup; listens
 |---|---|---|
 | `DATABASE_URL` | **required** | Postgres DSN; unset ⇒ boot error naming it |
 | `KAFKA_BROKERS` | **required** | comma-separated broker list |
-| `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` … `CARTON_DISCREPANCY_CONSUMER_GROUP` | **required** (all seven) | the pinned group ids of the table above |
+| `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` … `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | **required** (all eight) | the pinned group ids of the table above |
 | `HTTP_ADDR` | `:8080` | REST listen address |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | Go duration (or plain seconds) between relay passes |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | attempts before the relay excludes a row (`0` = unlimited) |

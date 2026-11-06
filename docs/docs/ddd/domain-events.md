@@ -85,6 +85,7 @@ skipped (WARN, commit past).
 | `wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | receipt id + sscc or `-` + kind | One case per (receipt, sscc, kind); UnlabelledCarton/CartonOverLimit route to receiving-lead, every other kind to problem-solve (ADR 0006) |
 | `wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | bin id | Promoted by the producer (PR #239, merged 2026-10-21) |
 | `wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | stock unit id | Same promotion |
+| `wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | package id | One problem-solve case per missed package (site_id feeds the dedup key); the load/order/cutoff stay in the frozen payload (ADR 0010) |
 | `wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | — | **Correlation only, never a case source**: the correlated fact of the auto-resolve rule |
 
 **Not consumed (roadmap):** workforce-management `PathUnderstaffed`,
