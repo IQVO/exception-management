@@ -53,7 +53,7 @@ is visible on the case, not on the wire. Outbox rows the encoder refuses, or tha
 
 ## Consumed
 
-Nine case sources plus one correlation fact, each under its pinned consumer group. Dispatch is on
+Fourteen case sources plus one correlation fact, each under its pinned consumer group. Dispatch is on
 the FULL type; every other type on those topics is ignored (commit past).
 
 | Type | Topic | Consumer group env |
@@ -68,6 +68,11 @@ the FULL type; every other type on those topics is ignored (commit past).
 | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.returns-processing.returnreceipt.UnexpectedReturnReceived` | `warehouse.returns-processing.events` | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | `CARTON_DISCREPANCY_CONSUMER_GROUP` |
+| `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | `warehouse.yard-management.events` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
+| `com.warehouse.wms.yard-management.trailer.SealExceptionRaised` | `warehouse.yard-management.events` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
+| `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
+| `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
+| `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | `ORDER_CORRELATION_CONSUMER_GROUP` — **correlation only, never a case source** |
 
 **Roadmap, not consumed:** workforce-management `PathUnderstaffed` and

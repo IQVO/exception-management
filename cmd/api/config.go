@@ -51,7 +51,7 @@ func brokersFromEnv() []string {
 	return brokers
 }
 
-// consumerGroupEnvs are the six pinned consumer-group variables of
+// consumerGroupEnvs are the nine pinned consumer-group variables of
 // .claude/rules/integration-events.md. They are read and validated at boot
 // even though the consumers themselves are a later build step on this
 // binary: fail-closed now, so a deployment cannot go live missing a group id
@@ -64,6 +64,8 @@ var consumerGroupEnvs = []string{
 	"INVENTORY_EXCEPTIONS_CONSUMER_GROUP",
 	"RETURNS_EXCEPTIONS_CONSUMER_GROUP",
 	"CARTON_DISCREPANCY_CONSUMER_GROUP",
+	"YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP",
+	"DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP",
 }
 
 // parseRelayInterval reads OUTBOX_RELAY_INTERVAL (a Go duration or plain
@@ -148,7 +150,7 @@ func shutdownDrainDelay(logger *slog.Logger) time.Duration {
 }
 
 // bootConfig is the mandatory configuration: real Postgres, real Kafka and
-// the six pinned consumer groups. There is no default and no degraded mode
+// the nine pinned consumer groups. There is no default and no degraded mode
 // behind any of it.
 type bootConfig struct {
 	databaseURL string

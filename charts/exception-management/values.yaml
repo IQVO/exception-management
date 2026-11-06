@@ -125,6 +125,8 @@ config:
   inventoryExceptionsConsumerGroup: "exception-management-inventory"            # INVENTORY_EXCEPTIONS_CONSUMER_GROUP (warehouse.inventory.events)
   returnsExceptionsConsumerGroup: "exception-management-returns"                # RETURNS_EXCEPTIONS_CONSUMER_GROUP (warehouse.returns-processing.events)
   cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"      # CARTON_DISCREPANCY_CONSUMER_GROUP (warehouse.inbound-receiving.events)
+  yardManagementExceptionsConsumerGroup: "exception-management-yard-management"   # YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP (warehouse.yard-management.events)
+  dockSchedulingExceptionsConsumerGroup: "exception-management-dock-scheduling"   # DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP (warehouse.dock-scheduling.events)
 
 # MANDATORY: the chart refuses to render unless database.url or
 # database.existingSecret is set (templates/_helpers.tpl:
