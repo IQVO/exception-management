@@ -1,7 +1,8 @@
-// Package kafka holds this service's INBOUND Kafka consumers: the six fact
+// Package kafka holds this service's INBOUND Kafka consumers: the eight fact
 // consumers of .claude/rules/integration-events.md (fulfillment, work
-// planning, network fulfillment, inventory, returns — the exception-class
-// facts — and order correlation for auto-resolve). Every consumer decodes
+// planning, network fulfillment, inventory, returns, inbound receiving and
+// outbound shipping — the exception-class facts — and order correlation for
+// auto-resolve). Every consumer decodes
 // CloudEvents 1.0 only, via internal/adapters/kafka/cloudevents, and
 // dispatches on the FULL `type` string. The consumers only decode and map:
 // every effect is a use case of internal/application/usecases.

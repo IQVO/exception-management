@@ -183,6 +183,7 @@ live in values (config.*ConsumerGroup), never in a template literal.
 {{- $_ := required "exception-management requires config.inventoryExceptionsConsumerGroup to be set (INVENTORY_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.inventoryExceptionsConsumerGroup -}}
 {{- $_ := required "exception-management requires config.returnsExceptionsConsumerGroup to be set (RETURNS_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.returnsExceptionsConsumerGroup -}}
 {{- $_ := required "exception-management requires config.cartonDiscrepancyConsumerGroup to be set (CARTON_DISCREPANCY_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.cartonDiscrepancyConsumerGroup -}}
+{{- $_ := required "exception-management requires config.outboundShippingExceptionsConsumerGroup to be set (OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.outboundShippingExceptionsConsumerGroup -}}
 {{- end -}}
 
 {{/*

@@ -101,6 +101,8 @@ spec:
               value: {{ .Values.config.returnsExceptionsConsumerGroup | quote }}
             - name: CARTON_DISCREPANCY_CONSUMER_GROUP
               value: {{ .Values.config.cartonDiscrepancyConsumerGroup | quote }}
+            - name: OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP
+              value: {{ .Values.config.outboundShippingExceptionsConsumerGroup | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

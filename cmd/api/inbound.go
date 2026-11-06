@@ -18,7 +18,7 @@ import (
 	"github.com/claudioed/exception-management/internal/application/usecases"
 )
 
-// The inbound side of the composition root: the six fact consumers of
+// The inbound side of the composition root: the eight fact consumers of
 // .claude/rules/integration-events.md and the SLA sweep ticker. All of it
 // runs on the real Postgres adapters — no memory doubles reach cmd/.
 
@@ -38,7 +38,7 @@ type inboundRuntime struct {
 	sweepDone chan struct{}
 }
 
-// buildConsumers wires the use cases over the Postgres adapters and the seven
+// buildConsumers wires the use cases over the Postgres adapters and the eight
 // consumers over the pinned group ids (each id from its own environment
 // variable, never a literal — .claude/rules/integration-events.md).
 func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, clock ports.Clock, logger *slog.Logger) []*kafkain.Consumer {
@@ -70,11 +70,12 @@ func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, cl
 		kafkain.NewInventoryExceptionsConsumer(cfg.brokers, g["INVENTORY_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewReturnsExceptionsConsumer(cfg.brokers, g["RETURNS_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewCartonDiscrepancyConsumer(cfg.brokers, g["CARTON_DISCREPANCY_CONSUMER_GROUP"], openCarton, logger),
+		kafkain.NewOutboundShippingExceptionsConsumer(cfg.brokers, g["OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewOrderCorrelationConsumer(cfg.brokers, g["ORDER_CORRELATION_CONSUMER_GROUP"], correlate, logger),
 	}
 }
 
-// startInbound boots the seven consumers and the SLA sweep ticker. A consumer
+// startInbound boots the eight consumers and the SLA sweep ticker. A consumer
 // that returns anything other than ctx.Cancellation is a DEATH: it lands on
 // errCh, run returns the error and the process exits non-zero — the pod
 // restarts (the fleet rule; a silently dead consumer is a silently missed
