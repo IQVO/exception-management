@@ -1,4 +1,4 @@
--- 0004_yard_exception_policies.down.sql: recreate the previous schema exactly.
+-- 0005_yard_exception_policies.down.sql: recreate the previous schema exactly.
 DELETE FROM exception_policies
 WHERE source_type IN (
     'com.warehouse.wms.yard-management.yardvisit.VisitRejected',

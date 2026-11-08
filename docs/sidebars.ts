@@ -138,6 +138,11 @@ const sidebars: SidebarsConfig = {
           label: '0010 Yard exceptions consumers and routing',
           href: '/docs/adr/0010-yard-exceptions-consumers-and-routing',
         },
+        {
+          type: 'link',
+          label: '0010 PackageMissedLoad consumer',
+          href: '/docs/adr/0010-package-missed-load-consumer',
+        },
       ],
     },
   ],

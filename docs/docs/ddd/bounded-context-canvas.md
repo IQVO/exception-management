@@ -82,6 +82,7 @@ ops-agent work cases instead of raw events.
 | `warehouse.inventory.events` | `...bin.DiscrepancyDetected`, `...stock.ItemUnlocated` — `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | `warehouse.yard-management.events` | `...yardvisit.VisitRejected`, `...trailer.SealExceptionRaised`, `...trailer.TrailerDwellExceeded`, `...yardcheck.YardCheckClosed` — `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | `warehouse.dock-scheduling.events` | `...dockappointment.DockAppointmentNoShow` — `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| `warehouse.outbound-shipping.events` | `...shippingpackage.PackageMissedLoad` — `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | REST | `GET/POST /exceptions*` (list, triage, assign, resolve), `GET/PUT /exception-policies*` | Operator commands; deliberately no `POST /exceptions` |
 | Roadmap | workforce-management `PathUnderstaffed`, network-inventory-planning `TransferStuckDetected` (analytics-topic sources, promotion pending) | planned / not built |
 

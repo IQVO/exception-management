@@ -1,4 +1,4 @@
--- 0004_yard_exception_policies.up.sql: the default routing of the yard
+-- 0005_yard_exception_policies.up.sql: the default routing of the yard
 -- exceptions (ADR 0010): one policy per source type, so the queue, severity
 -- and SLA of a case come from data, not code. yard-management's four
 -- exception facts go to the yard supervisor; dock-scheduling's no-show to

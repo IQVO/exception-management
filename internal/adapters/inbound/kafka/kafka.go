@@ -1,8 +1,9 @@
-// Package kafka holds this service's INBOUND Kafka consumers: the nine
+// Package kafka holds this service's INBOUND Kafka consumers: the ten
 // consumers of .claude/rules/integration-events.md (fulfillment, work
 // planning, network fulfillment, inventory, returns, carton discrepancies,
-// yard-management and dock-scheduling — eight exception-class fact
-// consumers — and order correlation for auto-resolve). Every consumer decodes
+// yard-management, dock-scheduling and outbound shipping — nine
+// exception-class fact consumers — and order correlation for
+// auto-resolve). Every consumer decodes
 // CloudEvents 1.0 only, via internal/adapters/kafka/cloudevents, and
 // dispatches on the FULL `type` string. The consumers only decode and map:
 // every effect is a use case of internal/application/usecases.

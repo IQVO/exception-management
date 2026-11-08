@@ -57,6 +57,7 @@ live REST or MCP call to a sibling at request time, ever.
 | inventory-storage | `warehouse.inventory.events` | `bin.DiscrepancyDetected`, `stock.ItemUnlocated` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | Live: promoted by the producer's PR #239 (merged 2026-10-21) |
 | yard-management | `warehouse.yard-management.events` | `yardvisit.VisitRejected`, `trailer.SealExceptionRaised`, `trailer.TrailerDwellExceeded`, `yardcheck.YardCheckClosed` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | Pinned consumer-first from the producer's contract (ADR 0010); one case per discrepancy of a yard check |
 | dock-scheduling | `warehouse.dock-scheduling.events` | `dockappointment.DockAppointmentNoShow` | `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` | Pinned consumer-first from the producer's contract (ADR 0010) |
+| outbound-shipping | `warehouse.outbound-shipping.events` | `shippingpackage.PackageMissedLoad` | `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | Live: one problem-solve case per missed package (ADR 0010) |
 
 ADR 0003/0004 still describe the inventory and package types as "pending
 the producer's promotion PR"; those promotions have since merged — the ADR

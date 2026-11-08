@@ -90,6 +90,7 @@ skipped (WARN, commit past).
 | `wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | trailer id + CloudEvents time | The payload carries no instant of its own (ADR 0010) |
 | `wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | yard check id + kind + location + trailer id, unit number or `-` | One case per discrepancy, one claimed event id for the whole check (ADR 0010) |
 | `wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | appointment id | One case per appointment; default queue `dock-planner` (ADR 0010) |
+| `wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | package id | One problem-solve case per missed package (site_id feeds the dedup key); the load/order/cutoff stay in the frozen payload (ADR 0010) |
 | `wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | — | **Correlation only, never a case source**: the correlated fact of the auto-resolve rule |
 
 **Not consumed (roadmap):** workforce-management `PathUnderstaffed`,

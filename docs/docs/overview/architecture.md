@@ -60,7 +60,7 @@ Two, in separate domain packages ([ADR 0002](/docs/adr/0002-aggregates-and-polic
 
 ## Flow of a fact
 
-1. A consumer on one of the nine pinned consumer groups reads a CloudEvent, dedupes on the
+1. A consumer on one of the ten pinned consumer groups reads a CloudEvent, dedupes on the
    CloudEvents `id` in the same transaction as the effect, and commits the offset only after
    success ([ADR 0003](/docs/adr/0003-local-copies-and-consumed-contracts)).
 2. An unknown fact type for a declared source opens a case; a repeat **touches** it.
@@ -75,7 +75,7 @@ Two, in separate domain packages ([ADR 0002](/docs/adr/0002-aggregates-and-polic
 
 | Binary | Serves | Never does |
 | --- | --- | --- |
-| `cmd/api` | REST `:8080`, the eight fact consumers, the correlation consumer, the SLA sweeper, the outbox relay | — |
+| `cmd/api` | REST `:8080`, the nine fact consumers, the correlation consumer, the SLA sweeper, the outbox relay | — |
 | `cmd/mcp` | read-only MCP over Streamable HTTP `:8090` (`/mcp`, `GET /healthz`) | never writes, never dials Kafka, never runs the relay or the sweeper |
 | `cmd/a2a` | read-only A2A agent, JSON-RPC over HTTP `:8093` (`/`, `/a2a`, the card at `/.well-known/agent-card.json`, `GET /healthz`) | never writes, never dials Kafka, never runs the relay or the sweeper |
 

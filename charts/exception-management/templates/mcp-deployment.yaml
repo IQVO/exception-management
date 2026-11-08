@@ -45,7 +45,7 @@ spec:
           # DATABASE_URL and (migration step only) MIGRATIONS_DATABASE_URL.
           # cmd/mcp has no auth env, builds no outbox/unit of work (it can
           # never write), starts no relay, runs no SLA sweeper, runs none of
-          # the eight fact consumers and never dials Kafka (no KAFKA_BROKERS,
+          # the nine fact consumers and never dials Kafka (no KAFKA_BROKERS,
           # no consumer groups here). It is the read-only ops-agent surface.
           env:
             - name: MCP_ADDR

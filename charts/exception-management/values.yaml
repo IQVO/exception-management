@@ -112,7 +112,7 @@ config:
   # SHUTDOWN_DRAIN_DELAY: wait after /readyz flips before closing the
   # listener. Empty = not rendered; the binary defaults to 5s.
   shutdownDrainDelay: ""
-  # The STABLE consumer group ids of the six consumers (MANDATORY: the
+  # The STABLE consumer group ids of the ten consumers (MANDATORY: the
   # binary exits at boot without them, and the chart refuses to render with
   # an empty one). They are fixed names, not derived from the pod, so a
   # rescheduled pod resumes from its committed offsets. Do not rename them
@@ -127,6 +127,7 @@ config:
   cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"      # CARTON_DISCREPANCY_CONSUMER_GROUP (warehouse.inbound-receiving.events)
   yardManagementExceptionsConsumerGroup: "exception-management-yard-management"   # YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP (warehouse.yard-management.events)
   dockSchedulingExceptionsConsumerGroup: "exception-management-dock-scheduling"   # DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP (warehouse.dock-scheduling.events)
+  outboundShippingExceptionsConsumerGroup: "exception-management-outbound-shipping"  # OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP (warehouse.outbound-shipping.events)
 
 # MANDATORY: the chart refuses to render unless database.url or
 # database.existingSecret is set (templates/_helpers.tpl:

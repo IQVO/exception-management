@@ -36,4 +36,4 @@ model or the term is wrong.
 | **Handling policy** | Synonym for ExceptionPolicy used in the REST spec's tag names ("Exception policies"). |
 | **Outbox** | The transactional table every domain fact is written to in the same transaction as the aggregate; the relay drains it to Kafka (ADR 0005). |
 | **Dead letter** | A row whose fact has no wire shape, published raw to `warehouse.exception-management.events.dlq` with `x-dlq-*` headers. |
-| **Consumer group** | One of the nine pinned Kafka groups (one per source topic family + the correlation group), read from env, never a string literal. |
+| **Consumer group** | One of the ten pinned Kafka groups (one per source topic family + the correlation group), read from env, never a string literal. |

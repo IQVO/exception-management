@@ -73,6 +73,7 @@ the FULL type; every other type on those topics is ignored (commit past).
 | `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` |
+| `com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | `ORDER_CORRELATION_CONSUMER_GROUP` — **correlation only, never a case source** |
 
 **Roadmap, not consumed:** workforce-management `PathUnderstaffed` and
