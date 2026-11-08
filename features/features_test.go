@@ -144,4 +144,5 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	registerOutcomeSteps(sc, w)
 	registerEventAuditSteps(sc, w)
 	registerCartonSteps(sc, w)
+	registerYardSteps(sc, w)
 }

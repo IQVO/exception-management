@@ -26,7 +26,7 @@ binds). There is no config file and no `*_MODE` toggle anywhere — the chart re
 
 ### The six consumer-group variables
 
-All six are **mandatory** even though each names a group the binary's consumers use — the boot
+All nine are **mandatory** even though each names a group the binary's consumers use — the boot
 check fails closed so a deployment cannot go live missing a pinned group id. They are stable names,
 fixed in `.claude/rules/integration-events.md`; renaming one in a running environment re-reads the
 topic from the start.
@@ -39,6 +39,10 @@ topic from the start.
 | `ORDER_CORRELATION_CONSUMER_GROUP` | `warehouse.order-management.events` (auto-resolve correlation) |
 | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.inventory.events` |
 | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.returns-processing.events` |
+| `CARTON_DISCREPANCY_CONSUMER_GROUP` | `warehouse.inbound-receiving.events` (ADR 0006) |
+| `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.yard-management.events` (ADR 0010) |
+| `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.dock-scheduling.events` (ADR 0010) |
+| `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.outbound-shipping.events` (ADR 0010) |
 
 ## `cmd/mcp`
 

@@ -20,6 +20,8 @@ flowchart TB
         T4["warehouse.order-management.events"]
         T5["warehouse.returns-processing.events"]
         T6["warehouse.inventory.events"]
+        T7["warehouse.yard-management.events"]
+        T8["warehouse.dock-scheduling.events"]
     end
     subgraph INBOUND["internal/adapters/inbound/kafka"]
         C1["fulfillment consumer"]
@@ -28,6 +30,8 @@ flowchart TB
         C4["order-correlation consumer"]
         C5["returns consumer"]
         C6["inventory consumer"]
+        C7["yard exceptions consumer"]
+        C8["dock-scheduling consumer"]
     end
     subgraph APP["internal/application/usecases"]
         OT["OpenOrTouchException"]
@@ -53,6 +57,8 @@ flowchart TB
     T3 --> C3 --> OT
     T5 --> C5 --> OT
     T6 --> C6 --> OT
+    T7 --> C7 --> OT
+    T8 --> C8 --> OT
     T4 --> C4 --> AR
     C1 -- "TaskCPTMissed.order_ref" --> AR
 

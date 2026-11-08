@@ -10,7 +10,7 @@
 // The surface is READ-ONLY: no write use case is wired here at all, so this
 // binary can never insert into the outbox (it builds no event sink, no unit
 // of work and no outbox repository). It never starts the outbox relay, never
-// runs the six fact consumers or the SLA sweeper and never dials Kafka (no
+// runs the nine fact consumers or the SLA sweeper and never dials Kafka (no
 // KAFKA_BROKERS, no consumer groups, no *_MODE): those run in cmd/api only.
 // Like cmd/api it has no in-memory mode: without DATABASE_URL it refuses to
 // boot.

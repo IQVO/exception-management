@@ -26,6 +26,8 @@ flowchart LR
     OM["order-management"] -->|warehouse.order-management.events| EM
     RP["returns-processing"] -->|warehouse.returns-processing.events| EM
     IS["inventory-storage"] -->|warehouse.inventory.events| EM
+    YM["yard-management"] -->|warehouse.yard-management.events| EM
+    DS["dock-scheduling"] -->|warehouse.dock-scheduling.events| EM
     OP(["Operators, console"]) -->|"REST /exceptions"| EM
     EM["exception-management"]
 ```
@@ -78,6 +80,8 @@ ops-agent work cases instead of raw events.
 | `warehouse.returns-processing.events` | `...returnreceipt.UnexpectedReturnReceived` — `RETURNS_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | `warehouse.inbound-receiving.events` | `...receipt.CartonDiscrepancyRaised` — `CARTON_DISCREPANCY_CONSUMER_GROUP` | Conformist |
 | `warehouse.inventory.events` | `...bin.DiscrepancyDetected`, `...stock.ItemUnlocated` — `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| `warehouse.yard-management.events` | `...yardvisit.VisitRejected`, `...trailer.SealExceptionRaised`, `...trailer.TrailerDwellExceeded`, `...yardcheck.YardCheckClosed` — `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| `warehouse.dock-scheduling.events` | `...dockappointment.DockAppointmentNoShow` — `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | `warehouse.outbound-shipping.events` | `...shippingpackage.PackageMissedLoad` — `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | REST | `GET/POST /exceptions*` (list, triage, assign, resolve), `GET/PUT /exception-policies*` | Operator commands; deliberately no `POST /exceptions` |
 | Roadmap | workforce-management `PathUnderstaffed`, network-inventory-planning `TransferStuckDetected` (analytics-topic sources, promotion pending) | planned / not built |

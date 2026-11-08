@@ -25,7 +25,7 @@ info:
     the same `id`). Kafka key = case id (source type for the policy event), so
     one case's history stays ordered on one partition.
 
-    **Consumed (ADR 0003, 0006, 0010).** Exception facts from eight sibling
+    **Consumed (ADR 0003, 0006, 0010).** Exception facts from ten sibling
     contexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
     `WeightDiscrepancyDetected`), wes-work-planning
     (`BacklogThresholdBreached`), network-fulfillment
@@ -33,8 +33,12 @@ info:
     order-management (`OrderRepromised`, correlation for auto-resolve only),
     returns-processing (`UnexpectedReturnReceived`), inbound-receiving
     (`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006),
-    inventory-storage (`DiscrepancyDetected`, `ItemUnlocated`) and
-    outbound-shipping (`PackageMissedLoad`, ADR 0010). Each consumed message opens or
+    inventory-storage (`DiscrepancyDetected`, `ItemUnlocated`),
+    yard-management (`VisitRejected`, `SealExceptionRaised`,
+    `TrailerDwellExceeded`, `YardCheckClosed` — one case per
+    discrepancy, ADR 0010), dock-scheduling
+    (`DockAppointmentNoShow`, ADR 0010) and outbound-shipping
+    (`PackageMissedLoad`, ADR 0010). Each consumed message opens or
     touches exactly one open case per dedup key (source type, source subject,
     site); the source payload is frozen on the case, never re-fetched. The
     consumed messages below are the producers' own contracts, restated here
@@ -271,6 +275,50 @@ channels:
         - name: consumed
       message:
         $ref: "#/components/messages/CartonDiscrepancyRaised"
+
+  warehouse.yard-management.events:
+    description: |
+      yard-management's integration topic (ADR 0010). This service consumes
+      ONLY `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded` and
+      `YardCheckClosed` under a stable consumer group read from env
+      `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP`. Every other type (the
+      producer's analytics-heavy surface) is ignored. The contracts below are
+      pinned consumer-first from the producer's published contract.
+    publish:
+      operationId: consumeYardManagementEvents
+      summary: Consume yard exceptions as routed cases.
+      description: |
+        One case per visit (VisitRejected), per trailer raise (SealExceptionRaised,
+        TrailerDwellExceeded) and per discrepancy (YardCheckClosed). Each
+        source type is its own policy (default queue `yard-supervisor`,
+        migration 0004). The CloudEvents `id` claim and the effect commit in
+        one transaction; a yard check claims its id once for all of its cases.
+      tags:
+        - name: consumed
+      message:
+        oneOf:
+          - $ref: "#/components/messages/VisitRejected"
+          - $ref: "#/components/messages/SealExceptionRaised"
+          - $ref: "#/components/messages/TrailerDwellExceeded"
+          - $ref: "#/components/messages/YardCheckClosed"
+
+  warehouse.dock-scheduling.events:
+    description: |
+      dock-scheduling's integration topic (ADR 0010). This service consumes
+      ONLY `DockAppointmentNoShow` under a stable consumer group read from env
+      `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP`. Every other type on the
+      topic (bookings, reschedules, cancellations, door closures) is ignored.
+    publish:
+      operationId: consumeDockSchedulingEvents
+      summary: Consume appointment no-shows as dock-planner cases.
+      description: |
+        One case per appointment id; the policy is the source type's own
+        (default queue `dock-planner`, migration 0004). The CloudEvents `id`
+        claim and the effect commit in one transaction.
+      tags:
+        - name: consumed
+      message:
+        $ref: "#/components/messages/DockAppointmentNoShow"
 
   warehouse.inventory.events:
     description: |
@@ -884,6 +932,187 @@ components:
               actual: "10"
               at: "2026-10-24T09:00:00Z"
 
+    VisitRejected:
+      name: VisitRejected
+      title: VisitRejected (consumed, yard-management)
+      summary: A yard visit was refused at the gate.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.yardvisit.VisitRejected`,
+        source `/warehouse/yard-management`, subject and Kafka key = the visit
+        id. Dedup subject = `visit_id`; the site is `site_id`. ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/VisitRejectedEvent"
+      examples:
+        - name: sealMismatch
+          summary: A seal mismatch refused the visit.
+          payload:
+            specversion: "1.0"
+            id: "0a1f6c52-3d7e-4c1b-9a10-7e2b5d6c8f01"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.yardvisit.VisitRejected"
+            subject: "visit-3f9a"
+            time: "2026-11-05T08:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:VisitRejected:v1"
+            data:
+              visit_id: "visit-3f9a"
+              site_id: "SITE-1"
+              carrier_scac: "ABCD"
+              appointment_id: "appt-77c1"
+              reason: "SEAL_MISMATCH"
+              rejected_at: "2026-11-05T08:00:00Z"
+
+    SealExceptionRaised:
+      name: SealExceptionRaised
+      title: SealExceptionRaised (consumed, yard-management)
+      summary: A trailer seal differs from the one the carrier declared.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.trailer.SealExceptionRaised`,
+        source `/warehouse/yard-management`, subject and Kafka key = the trailer
+        id. Dedup subject = `<trailer_id>/<raised_at>` (a later visit of the
+        same trailer is its own case; the same raise re-published touches).
+        ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/SealExceptionRaisedEvent"
+      examples:
+        - name: sealMismatch
+          summary: Expected seal S-1001, found S-2002.
+          payload:
+            specversion: "1.0"
+            id: "1b2e7d63-4e8f-4d2c-8b21-8f3c6e7d9a02"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.trailer.SealExceptionRaised"
+            subject: "trl-5d20"
+            time: "2026-11-05T08:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:SealExceptionRaised:v1"
+            data:
+              trailer_id: "trl-5d20"
+              site_id: "SITE-1"
+              appointment_id: "appt-77c1"
+              expected_seal_number: "S-1001"
+              found_seal_number: "S-2002"
+              raised_at: "2026-11-05T08:30:00Z"
+
+    TrailerDwellExceeded:
+      name: TrailerDwellExceeded
+      title: TrailerDwellExceeded (consumed, yard-management)
+      summary: A trailer stayed on site past its dwell threshold.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded`,
+        source `/warehouse/yard-management`, subject and Kafka key = the trailer
+        id. The payload carries no instant: the dedup subject is
+        `<trailer_id>/<CloudEvents time>` (the producer raises once per
+        trailer and threshold crossing). ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/TrailerDwellExceededEvent"
+      examples:
+        - name: dryVan
+          summary: A dry van 120 minutes past its threshold.
+          payload:
+            specversion: "1.0"
+            id: "2c3f8e74-5f90-4e3d-9c32-9a4d7f8eab03"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded"
+            subject: "trl-5d20"
+            time: "2026-11-05T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:TrailerDwellExceeded:v1"
+            data:
+              trailer_id: "trl-5d20"
+              site_id: "SITE-1"
+              kind: "DRY_VAN"
+              dwell_minutes: 3000
+              threshold_minutes: 2880
+              location_code: "SPOT-04"
+
+    YardCheckClosed:
+      name: YardCheckClosed
+      title: YardCheckClosed (consumed, yard-management)
+      summary: A yard audit closed; each discrepancy becomes its own case.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed`,
+        source `/warehouse/yard-management`, subject and Kafka key = the yard
+        check id. ONE case per entry of `discrepancies`, keyed
+        `<yard_check_id>/<kind>/<location_code>/<trailer_id, else unit_number,
+        else ->`; the CloudEvents `id` is claimed once for the whole check. A
+        check without discrepancies opens nothing. ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/YardCheckClosedEvent"
+      examples:
+        - name: twoFindings
+          summary: One trailer missing, one unexpected.
+          payload:
+            specversion: "1.0"
+            id: "3d409f85-6aa1-4f4e-8d43-ab5e809fbc04"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.yardcheck.YardCheckClosed"
+            subject: "yck-9e41"
+            time: "2026-11-05T11:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:YardCheckClosed:v1"
+            data:
+              yard_check_id: "yck-9e41"
+              site_id: "SITE-1"
+              closed_at: "2026-11-05T11:00:00Z"
+              discrepancies:
+                - kind: "MISSING"
+                  location_code: "SPOT-01"
+                  trailer_id: "trl-5d20"
+                  unit_number: "TR100"
+                - kind: "UNEXPECTED"
+                  location_code: "SPOT-02"
+                  trailer_id: null
+                  unit_number: "TR200"
+
+    DockAppointmentNoShow:
+      name: DockAppointmentNoShow
+      title: DockAppointmentNoShow (consumed, dock-scheduling)
+      summary: A carrier missed its dock appointment window.
+      description: |
+        `type` =
+        `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow`,
+        source `/warehouse/dock-scheduling`, subject and Kafka key = the
+        appointment id. Dedup subject = `appointment_id`; NO_SHOW is terminal in
+        dock-scheduling, so one case per appointment. ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/DockAppointmentNoShowEvent"
+      examples:
+        - name: inbound
+          summary: An inbound appointment whose grace period lapsed.
+          payload:
+            specversion: "1.0"
+            id: "4e51a096-7bb2-405f-9e54-bc6f91a0cd05"
+            source: "/warehouse/dock-scheduling"
+            type: "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow"
+            subject: "appt-77c1"
+            time: "2026-11-05T11:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:dock-scheduling:events:DockAppointmentNoShow:v1"
+            data:
+              appointment_id: "appt-77c1"
+              site_id: "SITE-1"
+              door_code: "DOOR-03"
+              direction: "INBOUND"
+              carrier_scac: "ABCD"
+              window_end: "2026-11-05T10:00:00Z"
+              version: 3
+
     PackageMissedLoad:
       name: PackageMissedLoad
       title: PackageMissedLoad (consumed, outbound-shipping)
@@ -1469,6 +1698,95 @@ components:
                 expected: { type: string }
                 actual: { type: string }
                 at: { type: string, format: date-time }
+
+    VisitRejectedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [visit_id, site_id, reason, rejected_at]
+              properties:
+                visit_id: { type: string }
+                site_id: { type: string }
+                carrier_scac: { type: [string, "null"] }
+                appointment_id: { type: [string, "null"] }
+                reason: { type: string, description: "APPOINTMENT_REQUIRED, UNKNOWN_APPOINTMENT, SEAL_MISMATCH, TRAILER_ALREADY_ON_SITE or SITE_REQUEST; kept in the frozen payload, not routed on." }
+                rejected_at: { type: string, format: date-time }
+
+    SealExceptionRaisedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [trailer_id, site_id, raised_at]
+              properties:
+                trailer_id: { type: string }
+                site_id: { type: string }
+                appointment_id: { type: [string, "null"] }
+                expected_seal_number: { type: [string, "null"] }
+                found_seal_number: { type: [string, "null"] }
+                raised_at: { type: string, format: date-time }
+
+    TrailerDwellExceededEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [trailer_id, site_id, dwell_minutes, threshold_minutes]
+              properties:
+                trailer_id: { type: string }
+                site_id: { type: string }
+                kind: { type: string, description: "The trailer kind whose threshold was crossed (DRY_VAN, REEFER, FLATBED, CONTAINER)." }
+                dwell_minutes: { type: integer, minimum: 0 }
+                threshold_minutes: { type: integer, minimum: 0 }
+                location_code: { type: [string, "null"] }
+
+    YardCheckClosedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [yard_check_id, site_id, closed_at, discrepancies]
+              properties:
+                yard_check_id: { type: string }
+                site_id: { type: string }
+                closed_at: { type: string, format: date-time }
+                discrepancies:
+                  type: array
+                  description: One case per entry. May be empty (a clean check).
+                  items:
+                    type: object
+                    required: [kind, location_code]
+                    properties:
+                      kind: { type: string, description: "MISSING, UNEXPECTED or WRONG_LOCATION today; any non-blank string is accepted." }
+                      location_code: { type: string }
+                      trailer_id: { type: [string, "null"] }
+                      unit_number: { type: [string, "null"] }
+
+    DockAppointmentNoShowEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [appointment_id, site_id]
+              properties:
+                appointment_id: { type: string }
+                site_id: { type: string }
+                door_code: { type: string }
+                direction: { type: string, enum: [INBOUND, OUTBOUND] }
+                carrier_scac: { type: [string, "null"] }
+                window_end: { type: string, format: date-time }
+                version: { type: integer, minimum: 1 }
 
     PackageMissedLoadEvent:
       allOf:

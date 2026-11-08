@@ -18,6 +18,8 @@ config:
   inventoryExceptionsConsumerGroup: "exception-management-inventory"
   returnsExceptionsConsumerGroup: "exception-management-returns"
   cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"
+  yardManagementExceptionsConsumerGroup: "exception-management-yard-management"
+  dockSchedulingExceptionsConsumerGroup: "exception-management-dock-scheduling"
 
 # The optional mcp component on, together with the api (and its Kong route:
 # mcp.route is off by default in the chart's values).

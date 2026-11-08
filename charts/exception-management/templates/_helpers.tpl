@@ -170,7 +170,7 @@ without KAFKA_BROKERS; there is no default broker.
 {{- end -}}
 
 {{/*
-MANDATORY: the six fact consumers always run, each under its STABLE group id
+MANDATORY: the eight fact consumers and the correlation consumer always run, each under its STABLE group id
 read from the environment (cmd/api loadBootConfig exits at boot without one;
 the names are pinned in .claude/rules/integration-events.md). The group ids
 live in values (config.*ConsumerGroup), never in a template literal.
@@ -183,6 +183,8 @@ live in values (config.*ConsumerGroup), never in a template literal.
 {{- $_ := required "exception-management requires config.inventoryExceptionsConsumerGroup to be set (INVENTORY_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.inventoryExceptionsConsumerGroup -}}
 {{- $_ := required "exception-management requires config.returnsExceptionsConsumerGroup to be set (RETURNS_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.returnsExceptionsConsumerGroup -}}
 {{- $_ := required "exception-management requires config.cartonDiscrepancyConsumerGroup to be set (CARTON_DISCREPANCY_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.cartonDiscrepancyConsumerGroup -}}
+{{- $_ := required "exception-management requires config.yardManagementExceptionsConsumerGroup to be set (YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.yardManagementExceptionsConsumerGroup -}}
+{{- $_ := required "exception-management requires config.dockSchedulingExceptionsConsumerGroup to be set (DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.dockSchedulingExceptionsConsumerGroup -}}
 {{- $_ := required "exception-management requires config.outboundShippingExceptionsConsumerGroup to be set (OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP): a stable Kafka group id; the binary exits at boot without it." .Values.config.outboundShippingExceptionsConsumerGroup -}}
 {{- end -}}
 

@@ -1,7 +1,7 @@
 // Command api is exception-management's composition root. It wires the whole
 // service: the REST surface (every route of apis/openapi.yaml on chi, the
 // Idempotency-Key middleware over the Postgres store, the NUL guard, the
-// readiness gate), the use cases over the real Postgres adapters, the eight
+// readiness gate), the use cases over the real Postgres adapters, the nine
 // inbound Kafka fact consumers (each under its pinned consumer-group
 // variable), the SLA sweep ticker and the transactional-outbox relay (the
 // event side leaves the service ONLY through it, ADR 0004/0005). A consumer
@@ -25,6 +25,8 @@
 //	INVENTORY_EXCEPTIONS_CONSUMER_GROUP
 //	RETURNS_EXCEPTIONS_CONSUMER_GROUP
 //	CARTON_DISCREPANCY_CONSUMER_GROUP
+//	YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP
+//	DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP
 //	OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP
 //	                          REQUIRED. Each consumer's group id
 //	                          (.claude/rules/integration-events.md)
@@ -122,10 +124,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	// setting, never the unlimited default by omission.
 	sink, relay := newRelay(cfg, pool, logger)
 
-	// The inbound side: eight consumers (each under its pinned group id) and
+	// The inbound side: ten consumers (each under its pinned group id) and
 	// the SLA sweep ticker. A consumer death lands on errCh: run returns it,
 	// the process exits non-zero, the pod restarts.
-	errCh := make(chan error, 8)
+	errCh := make(chan error, 11)
 	go func() {
 		logger.Info("http server listening", "addr", cfg.httpAddr)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
