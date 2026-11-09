@@ -42,7 +42,7 @@ topic from the start.
 | `CARTON_DISCREPANCY_CONSUMER_GROUP` | `warehouse.inbound-receiving.events` (ADR 0006) |
 | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.yard-management.events` (ADR 0010) |
 | `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.dock-scheduling.events` (ADR 0010) |
-| `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.outbound-shipping.events` (ADR 0010) |
+| `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.outbound-shipping.events` (ADR 0011) |
 
 ## `cmd/mcp`
 
