@@ -1,5 +1,5 @@
 -- 0004_package_missed_load_policy.up.sql: the policy of outbound-shipping's
--- PackageMissedLoad (ADR 0010). One route: a package that missed its load is
+-- PackageMissedLoad (ADR 0011). One route: a package that missed its load is
 -- a problem-solver's case — the operator decides the package's next load (or
 -- its return to stock) while order-management re-promises the order from the
 -- same fact. Version 1 only (append-only history, ADR 0002): operators

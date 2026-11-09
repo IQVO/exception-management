@@ -140,8 +140,8 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'link',
-          label: '0010 PackageMissedLoad consumer',
-          href: '/docs/adr/0010-package-missed-load-consumer',
+          label: '0011 PackageMissedLoad consumer',
+          href: '/docs/adr/0011-package-missed-load-consumer',
         },
       ],
     },

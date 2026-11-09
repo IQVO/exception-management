@@ -184,7 +184,7 @@ per ADR 0003):
 | `warehouse.inbound-receiving.events` | `CartonDiscrepancyRaised` (ADR 0006) | `CARTON_DISCREPANCY_CONSUMER_GROUP` |
 | `warehouse.yard-management.events` | `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded`, `YardCheckClosed` (one case per discrepancy, ADR 0010) | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
 | `warehouse.dock-scheduling.events` | `DockAppointmentNoShow` (ADR 0010) | `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` |
-| `warehouse.outbound-shipping.events` | `PackageMissedLoad` (ADR 0010) | `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` |
+| `warehouse.outbound-shipping.events` | `PackageMissedLoad` (ADR 0011) | `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` |
 
 The projector consumes `warehouse.exception-management.analytics` under
 `ANALYTICS_CONSUMER_GROUP` and dead-letters poison rows to

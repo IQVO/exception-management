@@ -25,7 +25,7 @@ info:
     the same `id`). Kafka key = case id (source type for the policy event), so
     one case's history stays ordered on one partition.
 
-    **Consumed (ADR 0003, 0006, 0010).** Exception facts from ten sibling
+    **Consumed (ADR 0003, 0006, 0010, 0011).** Exception facts from ten sibling
     contexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
     `WeightDiscrepancyDetected`), wes-work-planning
     (`BacklogThresholdBreached`), network-fulfillment
@@ -38,7 +38,7 @@ info:
     `TrailerDwellExceeded`, `YardCheckClosed` — one case per
     discrepancy, ADR 0010), dock-scheduling
     (`DockAppointmentNoShow`, ADR 0010) and outbound-shipping
-    (`PackageMissedLoad`, ADR 0010). Each consumed message opens or
+    (`PackageMissedLoad`, ADR 0011). Each consumed message opens or
     touches exactly one open case per dedup key (source type, source subject,
     site); the source payload is frozen on the case, never re-fetched. The
     consumed messages below are the producers' own contracts, restated here
@@ -346,7 +346,7 @@ channels:
     description: |
       outbound-shipping's integration topic. This service consumes ONLY
       `PackageMissedLoad` under a stable consumer group read from env
-      `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` (ADR 0010). Every other
+      `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` (ADR 0011). Every other
       type is ignored.
     publish:
       operationId: consumeOutboundShippingEvents
@@ -1125,7 +1125,7 @@ components:
         Subject and Kafka key = the package id. The producer raises it at
         most once per package and load; `source_order_id` is omitted when
         the manifest carried none. One problem-solve case per missed
-        package (ADR 0010).
+        package (ADR 0011).
       contentType: application/cloudevents+json
       tags:
         - name: consumed

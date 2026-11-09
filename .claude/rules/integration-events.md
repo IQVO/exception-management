@@ -95,7 +95,7 @@ standard page). Record this repo's own envelope decisions as ADRs under
 | `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | yard-management | pinned consumer-first (ADR 0010) |
 | `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | yard-management | pinned consumer-first (ADR 0010); one case per discrepancy |
 | `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | dock-scheduling | pinned consumer-first (ADR 0010) |
-| `com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | outbound-shipping | yes (ADR 0010) |
+| `com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | outbound-shipping | yes (ADR 0011) |
 
 Planned, not built (analytics-topic only today): workforce-management `PathUnderstaffed`, network-inventory-planning `TransferStuckDetected`.
 
