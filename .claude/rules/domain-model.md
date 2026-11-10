@@ -1,3 +1,10 @@
+---
+paths:
+  - "internal/domain/**"
+  - "internal/application/**"
+  - "features/**"
+---
+
 # Domain model: ubiquitous language, aggregates, events, use cases
 
 ## Ubiquitous Language (use these exact names)
@@ -28,11 +35,12 @@ Read models (projections, never aggregates): open cases by queue, SLA report, ro
 - `ExceptionAutoResolved` — a policy rule closed it on a correlated fact.
 - `ExceptionPolicyDeclared` — new policy version.
 
-## Key use cases (application layer, a later step of the service build)
+## Key use cases (`internal/application/usecases`)
 
 - `OpenOrTouchException` — consumer-driven, idempotent on the CloudEvents `id`; opens or touches by dedup key.
 - `TriageException`, `AssignException`, `ResolveException` — operator commands (REST).
 - `AutoResolveOnCorrelation` — consumer-driven; applies the policy rule (e.g. `OrderRepromised` closes the `TaskCPTMissed` case for the same work unit).
 - `SweepSLABreaches` — bounded ticker; sets the flag and raises `ExceptionEscalated`.
 - `DeclareExceptionPolicy` — new policy version.
-- `ListOpenExceptions`, `GetException`, `GetSLAReport` — reads (REST + read-only MCP).
+- `OpenCartonDiscrepancy` (ADR 0006), `OpenYardCheckDiscrepancies` (ADR 0010) — source-specific openers (open or touch the routed case).
+- `ListOpenExceptions`, `GetException`, `ListExceptionPolicies`, `GetSLAReport` — reads (REST, read-only MCP and A2A).
