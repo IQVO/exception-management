@@ -17,7 +17,7 @@ and frontend (the exceptions_mfe Module Federation remote, default off). The
 enabled renders run the components TOGETHER.
 
 It also asserts the real runtime: the mandatory env (database secret, brokers,
-the nine pinned consumer-group ids) is rendered, no *_MODE variable is ever
+the eleven pinned consumer-group ids) is rendered, no *_MODE variable is ever
 rendered (this service has no modes), and unset optional values stay absent so
 the binary's defaults apply. The frontend is a static nginx pod: it carries NO
 env at all (never a DSN, never brokers, never a consumer group).

@@ -85,6 +85,9 @@ skipped (WARN, commit past).
 | `wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | receipt id + sscc or `-` + kind | One case per (receipt, sscc, kind); UnlabelledCarton/CartonOverLimit route to receiving-lead, every other kind to problem-solve (ADR 0006) |
 | `wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | bin id | Promoted by the producer (PR #239, merged 2026-10-21) |
 | `wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | stock unit id | Same promotion |
+| `wms.inventory-storage.stock.StockHeld` | `warehouse.inventory.events` | held unit id | ONE case per held unit under the topic's second group `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP`; the sku/quantity/reason/receipt refs freeze on the case (ADR 0012) |
+| `wms.inventory-storage.stock.StockReleased` | `warehouse.inventory.events` | held unit id (close) | Auto-resolves the held unit's case; rides a RELEASE disposition in addition to StockDispositioned (ADR 0012) |
+| `wms.inventory-storage.stock.StockDispositioned` | `warehouse.inventory.events` | held unit id (close) | RELEASE/RETURN_TO_VENDOR/SCRAP auto-resolve with the disposition in the note; REWORK keeps the case open (ADR 0012) |
 | `wms.yard-management.yardvisit.VisitRejected` | `warehouse.yard-management.events` | visit id | One case per rejected visit; default queue `yard-supervisor` (ADR 0010) |
 | `wms.yard-management.trailer.SealExceptionRaised` | `warehouse.yard-management.events` | trailer id + `raised_at` | A later raise for the same trailer is its own case; the same raise re-published touches (ADR 0010) |
 | `wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | trailer id + CloudEvents time | The payload carries no instant of its own (ADR 0010) |

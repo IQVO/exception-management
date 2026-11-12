@@ -53,7 +53,8 @@ is visible on the case, not on the wire. Outbox rows the encoder refuses, or tha
 
 ## Consumed
 
-Fourteen case sources plus one correlation fact, each under its pinned consumer group. Dispatch is on
+Fifteen case sources, two held-stock closing facts and one correlation fact, each under its pinned
+consumer group. Dispatch is on
 the FULL type; every other type on those topics is ignored (commit past).
 
 | Type | Topic | Consumer group env |
@@ -66,6 +67,9 @@ the FULL type; every other type on those topics is ignored (commit past).
 | `com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled` | `warehouse.network-fulfillment.events` | `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` |
+| `com.warehouse.wms.inventory-storage.stock.StockHeld` | `warehouse.inventory.events` | `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` ([ADR 0012](/docs/adr/0012-held-stock-exception-cases): one case per held unit) |
+| `com.warehouse.wms.inventory-storage.stock.StockReleased` | `warehouse.inventory.events` | `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (auto-resolve, released note) |
+| `com.warehouse.wms.inventory-storage.stock.StockDispositioned` | `warehouse.inventory.events` | `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (auto-resolve; `REWORK` keeps the case open) |
 | `com.warehouse.wms.returns-processing.returnreceipt.UnexpectedReturnReceived` | `warehouse.returns-processing.events` | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` |
 | `com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | `CARTON_DISCREPANCY_CONSUMER_GROUP` |
 | `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | `warehouse.yard-management.events` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |

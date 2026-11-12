@@ -15,7 +15,7 @@ flows down; one lane per aggregate.
 
 ```mermaid
 flowchart TB
-    subgraph SOURCES["Facts consumed (pink) - six consumer groups"]
+    subgraph SOURCES["Facts consumed (pink) - one per pinned consumer group"]
         direction LR
         F1["TaskCPTMissed<br/>(re-fires each sweep)"]
         F2["PackageDiverted"]

@@ -24,9 +24,9 @@ binds). There is no config file and no `*_MODE` toggle anywhere — the chart re
 | `SLA_SWEEP_INTERVAL` | no | `1m` | SLA sweeper tick; malformed/non-positive falls back with a WARN (a typo never silently disables it) |
 | `SHUTDOWN_DRAIN_DELAY` | no | `5s` | wait after `/readyz` flips before the listener closes; `0` disables |
 
-### The six consumer-group variables
+### The consumer-group variables
 
-All nine are **mandatory** even though each names a group the binary's consumers use — the boot
+All eleven are **mandatory** even though each names a group the binary's consumers use — the boot
 check fails closed so a deployment cannot go live missing a pinned group id. They are stable names,
 fixed in `.claude/rules/integration-events.md`; renaming one in a running environment re-reads the
 topic from the start.
@@ -38,6 +38,7 @@ topic from the start.
 | `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.network-fulfillment.events` |
 | `ORDER_CORRELATION_CONSUMER_GROUP` | `warehouse.order-management.events` (auto-resolve correlation) |
 | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.inventory.events` |
+| `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.inventory.events` — the topic's second group, held-stock facts (ADR 0012) |
 | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.returns-processing.events` |
 | `CARTON_DISCREPANCY_CONSUMER_GROUP` | `warehouse.inbound-receiving.events` (ADR 0006) |
 | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | `warehouse.yard-management.events` (ADR 0010) |

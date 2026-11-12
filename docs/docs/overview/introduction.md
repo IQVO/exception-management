@@ -29,7 +29,7 @@ anomaly itself; it makes sure no anomaly is invisible, unowned or unmeasured.
 
 ## Where it sits
 
-It consumes nine case sources across five sibling topics plus one correlation fact, and publishes
+It consumes fifteen case sources across nine sibling topics plus one correlation fact, and publishes
 its own case lifecycle on `warehouse.exception-management.events`:
 
 ```mermaid
