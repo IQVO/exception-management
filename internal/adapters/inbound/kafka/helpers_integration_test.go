@@ -61,6 +61,7 @@ type pgWorld struct {
 	processed  *postgres.ProcessedEventRepo
 	consume    *usecases.ConsumeFact
 	correlate  *usecases.ConsumeCorrelation
+	settle     *usecases.AutoResolveHeldStock
 	declare    *usecases.DeclareExceptionPolicy
 	countTable func(table string) int
 }
@@ -89,9 +90,12 @@ func newPGWorld(t *testing.T) *pgWorld {
 		},
 		UnitOfWork: uow,
 	}
+	settle := &usecases.AutoResolveHeldStock{
+		Processed: processed, Cases: cases, Events: events, Clock: clock, UnitOfWork: uow,
+	}
 	return &pgWorld{
 		pool: pool, uow: uow, cases: cases, policies: policies, processed: processed,
-		consume: consume, correlate: correlate,
+		consume: consume, correlate: correlate, settle: settle,
 		declare:    &usecases.DeclareExceptionPolicy{Policies: policies, Events: events, Clock: clock, UnitOfWork: uow},
 		countTable: func(table string) int { return pgtest.Count(t, pool, table) },
 	}
