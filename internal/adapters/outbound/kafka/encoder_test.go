@@ -92,7 +92,7 @@ func goldenCases(t *testing.T) []goldenCase {
 			fact: outbox.Fact{
 				EventID: "a5948372-6150-4f3e-8d7c-4b6a2b1a0f9e", Entity: "exceptioncase", Event: "ExceptionAutoResolved",
 				AggregateID: caseID, OccurredAt: at(9, 35),
-				Data: data(t, `{"case_id":"`+caseID+`","rule_id":"`+taskCE+`->`+reprom+`","correlated_type":"`+reprom+`","correlated_event_id":"f3e2d1c0-9b8a-4c5d-6e7f-8a9b0c1d2e3f","at":"2026-10-21T09:35:00Z"}`),
+				Data: data(t, `{"case_id":"`+caseID+`","rule_id":"`+taskCE+`->`+reprom+`","correlated_type":"`+reprom+`","correlated_event_id":"f3e2d1c0-9b8a-4c5d-6e7f-8a9b0c1d2e3f","note":null,"at":"2026-10-21T09:35:00Z"}`),
 			},
 		},
 		{

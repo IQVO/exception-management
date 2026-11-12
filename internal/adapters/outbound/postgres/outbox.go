@@ -144,7 +144,7 @@ func caseFactData(e exceptioncase.Event) (any, error) {
 	case exceptioncase.ExceptionAutoResolved:
 		return autoResolvedData{
 			CaseID: f.CaseID(), RuleID: f.RuleID, CorrelatedType: f.CorrelatedType,
-			CorrelatedEventID: f.CorrelatedEventID, At: f.OccurredAt().UTC(),
+			CorrelatedEventID: f.CorrelatedEventID, Note: nullable(f.Note), At: f.OccurredAt().UTC(),
 		}, nil
 	default:
 		return nil, fmt.Errorf("unknown exception case fact %T: no wire shape is declared for it", e)
@@ -199,6 +199,7 @@ type autoResolvedData struct {
 	RuleID            string    `json:"rule_id"`
 	CorrelatedType    string    `json:"correlated_type"`
 	CorrelatedEventID string    `json:"correlated_event_id"`
+	Note              *string   `json:"note"`
 	At                time.Time `json:"at"`
 }
 
