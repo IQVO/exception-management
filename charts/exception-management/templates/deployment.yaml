@@ -83,8 +83,8 @@ spec:
             - name: SHUTDOWN_DRAIN_DELAY
               value: {{ . | quote }}
             {{- end }}
-            # The six pinned consumer group ids are mandatory and come from
-            # values, never a literal: a stable id is what makes a
+            # The eleven pinned consumer group ids are mandatory and come
+            # from values, never a literal: a stable id is what makes a
             # rescheduled pod resume from its committed offsets
             # (.claude/rules/integration-events.md).
             - name: FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP
@@ -97,10 +97,18 @@ spec:
               value: {{ .Values.config.orderCorrelationConsumerGroup | quote }}
             - name: INVENTORY_EXCEPTIONS_CONSUMER_GROUP
               value: {{ .Values.config.inventoryExceptionsConsumerGroup | quote }}
+            - name: HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP
+              value: {{ .Values.config.heldStockExceptionsConsumerGroup | quote }}
             - name: RETURNS_EXCEPTIONS_CONSUMER_GROUP
               value: {{ .Values.config.returnsExceptionsConsumerGroup | quote }}
             - name: CARTON_DISCREPANCY_CONSUMER_GROUP
               value: {{ .Values.config.cartonDiscrepancyConsumerGroup | quote }}
+            - name: YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP
+              value: {{ .Values.config.yardManagementExceptionsConsumerGroup | quote }}
+            - name: DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP
+              value: {{ .Values.config.dockSchedulingExceptionsConsumerGroup | quote }}
+            - name: OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP
+              value: {{ .Values.config.outboundShippingExceptionsConsumerGroup | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

@@ -17,7 +17,7 @@ flowchart LR
     FE["fulfillment-execution\nTaskCPTMissed · PackageDiverted ·\nWeightDiscrepancyDetected"]
     WP["work-planning\nBacklogThresholdBreached"]
     NF["network-fulfillment\nAcknowledgementDeadlineAtRisk ·\nOrphanedHoldCancelled"]
-    IS["inventory-storage\nDiscrepancyDetected ·\nItemUnlocated"]
+    IS["inventory-storage\nDiscrepancyDetected ·\nItemUnlocated ·\nStockHeld/StockReleased/\nStockDispositioned (ADR 0012)"]
     RP["returns-processing\nUnexpectedReturnReceived"]
   end
   OM["order-management\nOrderRepromised (correlation only)"]
@@ -48,6 +48,11 @@ producers' `origin/develop` before consuming (the pinned table is the
 - **Re-firing sources**: `TaskCPTMissed` re-fires on every sweep tick by design — the dedup key
   makes it one case with a growing `occurrence_count`, and the re-fire keeps `last_seen_at` fresh,
   which the auto-resolve window uses.
+- **Held stock (ADR 0012)**: inventory-storage's `StockHeld` opens exactly one case per held unit
+  id (the sku/quantity/hold reason/receipt refs freeze on it); `StockDispositioned` and
+  `StockReleased` auto-resolve it — a `REWORK` disposition keeps the unit held, so the case stays
+  open and the arrival counts as an occurrence. Read under the inventory topic's SECOND consumer
+  group (`HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP`), pinned to inventory-storage ADR 0052.
 - **Roadmap sources**: workforce-management `PathUnderstaffed` and network-inventory-planning
   `TransferStuckDetected` sit on analytics topics today; consumption starts when the producers
   promote them.

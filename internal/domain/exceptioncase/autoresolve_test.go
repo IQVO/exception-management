@@ -87,3 +87,62 @@ func TestAutoResolveRejectsInvalidEvidence(t *testing.T) {
 		}
 	}
 }
+
+// AutoResolve's optional note (ADR 0012): the closing fact's outcome —
+// a held-stock disposition — rides the resolution note onto the case
+// and the ExceptionAutoResolved fact; existing callers (no note) are
+// unchanged.
+func TestAutoResolveRecordsTheOptionalNote(t *testing.T) {
+	t.Parallel()
+	c := openedCase(t)
+	at := openedAt.Add(5 * time.Minute)
+	if err := c.AutoResolve(
+		"com.warehouse.wms.inventory-storage.stock.StockHeld->com.warehouse.wms.inventory-storage.stock.StockDispositioned",
+		"com.warehouse.wms.inventory-storage.stock.StockDispositioned",
+		"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+		at,
+		"disposition RETURN_TO_VENDOR",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if c.Note() != "disposition RETURN_TO_VENDOR" {
+		t.Errorf("note = %q, want the disposition outcome", c.Note())
+	}
+	evts := c.DomainEvents()
+	autoEvt, ok := evts[len(evts)-1].(ExceptionAutoResolved)
+	if !ok {
+		t.Fatalf("last event = %T", evts[len(evts)-1])
+	}
+	if autoEvt.Note != "disposition RETURN_TO_VENDOR" {
+		t.Errorf("ExceptionAutoResolved.Note = %q", autoEvt.Note)
+	}
+	// The snapshot keeps the note (the note column already exists).
+	s := c.Snapshot()
+	if s.Note != "disposition RETURN_TO_VENDOR" || s.Status != StatusResolved {
+		t.Errorf("snapshot = %+v", s)
+	}
+	restored, err := Restore(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Note() != "disposition RETURN_TO_VENDOR" {
+		t.Errorf("restored note = %q", restored.Note())
+	}
+
+	// The note-less call is untouched: no note, no snapshot change.
+	c2 := openedCase(t)
+	if err := c2.AutoResolve("r", "t", "e", at); err != nil {
+		t.Fatal(err)
+	}
+	if c2.Note() != "" {
+		t.Errorf("note = %q, want empty for a note-less auto-resolve", c2.Note())
+	}
+	// A blank note is treated as no note.
+	c3 := openedCase(t)
+	if err := c3.AutoResolve("r", "t", "e", at, " "); err != nil {
+		t.Fatal(err)
+	}
+	if c3.Note() != "" {
+		t.Errorf("note = %q, want empty for a blank note", c3.Note())
+	}
+}

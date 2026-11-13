@@ -101,7 +101,7 @@ plan's waves (`.hermes/plans/2026-10-20_231017-returns-processing-and-exception-
 Hexagonal / ports & adapters; dependencies point inward only:
 
 ```
-cmd/api/                       composition root: REST service, outbox relay, the seven fact consumers, the SLA sweeper
+cmd/api/                       composition root: REST service, outbox relay, the eleven consumers (ten fact + correlation), the SLA sweeper
 cmd/mcp/                       read-only MCP server (Streamable HTTP)
 cmd/a2a/                       read-only A2A agent (JSON-RPC over HTTP, Agent Card at /.well-known/agent-card.json)
 cmd/exceptions-projector/      analytics projector (the only analytical-DB writer)
@@ -121,7 +121,7 @@ internal/
     inbound/http/              chi handlers, DTOs, RFC 7807 error mapping, Idempotency-Key middleware
     inbound/mcp/               the four read-only MCP tools
     inbound/a2a/               A2A skills: sla_status, find_exceptions (both reads)
-    inbound/kafka/             the seven fact consumers + the projector's analytics consumer
+    inbound/kafka/             the eleven consumers + the projector's analytics consumer
     kafka/cloudevents/         the CloudEvents 1.0 envelope
     outbound/postgres/         pgxpool repos, golang-migrate runner, UnitOfWork, outbox + relay
     outbound/kafka/            integration + analytics topic publishers
@@ -180,8 +180,12 @@ per ADR 0003):
 | `warehouse.network-fulfillment.events` | `AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled` | `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` |
 | `warehouse.order-management.events` | `OrderRepromised` (policy correlation) | `ORDER_CORRELATION_CONSUMER_GROUP` |
 | `warehouse.inventory.events` | `DiscrepancyDetected`, `ItemUnlocated` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` |
+| `warehouse.inventory.events` (second group, ADR 0012) | `StockHeld`, `StockReleased`, `StockDispositioned` — one case per held unit, closed on disposition/release | `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` |
 | `warehouse.returns-processing.events` | `UnexpectedReturnReceived` | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` |
 | `warehouse.inbound-receiving.events` | `CartonDiscrepancyRaised` (ADR 0006) | `CARTON_DISCREPANCY_CONSUMER_GROUP` |
+| `warehouse.yard-management.events` | `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded`, `YardCheckClosed` (one case per discrepancy, ADR 0010) | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` |
+| `warehouse.dock-scheduling.events` | `DockAppointmentNoShow` (ADR 0010) | `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` |
+| `warehouse.outbound-shipping.events` | `PackageMissedLoad` (ADR 0011) | `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` |
 
 The projector consumes `warehouse.exception-management.analytics` under
 `ANALYTICS_CONSUMER_GROUP` and dead-letters poison rows to
@@ -206,8 +210,12 @@ export WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP=ex-local-work-planning
 export NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP=ex-local-network-fulfillment
 export ORDER_CORRELATION_CONSUMER_GROUP=ex-local-order-correlation
 export INVENTORY_EXCEPTIONS_CONSUMER_GROUP=ex-local-inventory
+export HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP=ex-local-held-stock
 export RETURNS_EXCEPTIONS_CONSUMER_GROUP=ex-local-returns
 export CARTON_DISCREPANCY_CONSUMER_GROUP=ex-local-carton-discrepancy
+export YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP=ex-local-yard-management
+export DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP=ex-local-dock-scheduling
+export OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP=ex-local-outbound-shipping
 go run ./cmd/api              # migrations run automatically at startup; listens on :8080
 ```
 
@@ -219,7 +227,7 @@ go run ./cmd/api              # migrations run automatically at startup; listens
 |---|---|---|
 | `DATABASE_URL` | **required** | Postgres DSN; unset ⇒ boot error naming it |
 | `KAFKA_BROKERS` | **required** | comma-separated broker list |
-| `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` … `CARTON_DISCREPANCY_CONSUMER_GROUP` | **required** (all seven) | the pinned group ids of the table above |
+| `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` … `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | **required** (all eleven) | the pinned group ids of the table above |
 | `HTTP_ADDR` | `:8080` | REST listen address |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | Go duration (or plain seconds) between relay passes |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | attempts before the relay excludes a row (`0` = unlimited) |
@@ -346,7 +354,7 @@ helm install exception-management ./charts/exception-management \
 ```
 
 The chart refuses to render without `database.url` (or
-`database.existingSecret`), `kafka.brokers` and the seven pinned consumer
+`database.existingSecret`), `kafka.brokers` and the ten pinned consumer
 groups (`config.*ConsumerGroup`). Optional components, all off by default:
 `mcp`, `analytics` (projector + reports), `frontend` and `a2a`. Chart
 invariants are asserted by `charts/exception-management/tests/`
@@ -453,7 +461,7 @@ CI (`.github/workflows/ci.yml`) runs `lint`, `guide-lint`, `complexity`,
 
 ## Architecture Decision Records
 
-The ADR index lives at [docs/adr/index.md](docs/adr/index.md) — 7 decisions,
+The ADR index lives at [docs/adr/index.md](docs/adr/index.md) — 10 decisions,
 from the bounded context itself to the aggregates, the consumed contracts,
 the CloudEvents catalogue, the outbox attempt cap and DLQ, the
 carton-discrepancy consumer and the A2A inbound adapter.

@@ -25,15 +25,23 @@ info:
     the same `id`). Kafka key = case id (source type for the policy event), so
     one case's history stays ordered on one partition.
 
-    **Consumed (ADR 0003, 0006).** Exception facts from seven sibling contexts:
-    fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
+    **Consumed (ADR 0003, 0006, 0010, 0011, 0012).** Exception facts from ten
+    sibling contexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
     `WeightDiscrepancyDetected`), wes-work-planning
     (`BacklogThresholdBreached`), network-fulfillment
     (`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),
     order-management (`OrderRepromised`, correlation for auto-resolve only),
     returns-processing (`UnexpectedReturnReceived`), inbound-receiving
-    (`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006) and inventory-storage
-    (`DiscrepancyDetected`, `ItemUnlocated`). Each consumed message opens or
+    (`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006),
+    inventory-storage (`DiscrepancyDetected`, `ItemUnlocated`, and — under a
+    second consumer group, ADR 0012 — `StockHeld`, `StockReleased`,
+    `StockDispositioned`: one case per held unit, auto-resolved when the
+    hold ends),
+    yard-management (`VisitRejected`, `SealExceptionRaised`,
+    `TrailerDwellExceeded`, `YardCheckClosed` — one case per
+    discrepancy, ADR 0010), dock-scheduling
+    (`DockAppointmentNoShow`, ADR 0010) and outbound-shipping
+    (`PackageMissedLoad`, ADR 0011). Each consumed message opens or
     touches exactly one open case per dedup key (source type, source subject,
     site); the source payload is frozen on the case, never re-fetched. The
     consumed messages below are the producers' own contracts, restated here
@@ -271,27 +279,103 @@ channels:
       message:
         $ref: "#/components/messages/CartonDiscrepancyRaised"
 
+  warehouse.yard-management.events:
+    description: |
+      yard-management's integration topic (ADR 0010). This service consumes
+      ONLY `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded` and
+      `YardCheckClosed` under a stable consumer group read from env
+      `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP`. Every other type (the
+      producer's analytics-heavy surface) is ignored. The contracts below are
+      pinned consumer-first from the producer's published contract.
+    publish:
+      operationId: consumeYardManagementEvents
+      summary: Consume yard exceptions as routed cases.
+      description: |
+        One case per visit (VisitRejected), per trailer raise (SealExceptionRaised,
+        TrailerDwellExceeded) and per discrepancy (YardCheckClosed). Each
+        source type is its own policy (default queue `yard-supervisor`,
+        migration 0004). The CloudEvents `id` claim and the effect commit in
+        one transaction; a yard check claims its id once for all of its cases.
+      tags:
+        - name: consumed
+      message:
+        oneOf:
+          - $ref: "#/components/messages/VisitRejected"
+          - $ref: "#/components/messages/SealExceptionRaised"
+          - $ref: "#/components/messages/TrailerDwellExceeded"
+          - $ref: "#/components/messages/YardCheckClosed"
+
+  warehouse.dock-scheduling.events:
+    description: |
+      dock-scheduling's integration topic (ADR 0010). This service consumes
+      ONLY `DockAppointmentNoShow` under a stable consumer group read from env
+      `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP`. Every other type on the
+      topic (bookings, reschedules, cancellations, door closures) is ignored.
+    publish:
+      operationId: consumeDockSchedulingEvents
+      summary: Consume appointment no-shows as dock-planner cases.
+      description: |
+        One case per appointment id; the policy is the source type's own
+        (default queue `dock-planner`, migration 0004). The CloudEvents `id`
+        claim and the effect commit in one transaction.
+      tags:
+        - name: consumed
+      message:
+        $ref: "#/components/messages/DockAppointmentNoShow"
+
   warehouse.inventory.events:
     description: |
-      inventory-storage's integration topic. This service consumes
-      `DiscrepancyDetected` and `ItemUnlocated` under a stable consumer group
-      read from env `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`. Both types arrive
-      here only after the producer's promotion PR (they are analytics-only
-      today); the contracts below are pinned consumer-first. Every other type
-      is ignored.
+      inventory-storage's integration topic. This service reads it under TWO
+      stable consumer groups. `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` consumes
+      `DiscrepancyDetected` and `ItemUnlocated` (both arrive here only after
+      the producer's promotion PR; the contracts below are pinned
+      consumer-first). `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012)
+      consumes the held-stock facts `StockHeld`, `StockReleased` and
+      `StockDispositioned`: every held unit gets exactly one open case,
+      auto-resolved when the hold ends. Every other type on the topic is
+      ignored by both groups.
     publish:
       operationId: consumeInventoryEvents
-      summary: Consume count discrepancies and unlocated stock.
+      summary: Consume count discrepancies, unlocated stock and held-stock facts.
       description: |
         A short count (`DiscrepancyDetected`) and the stock it could not find
-        (`ItemUnlocated`) each open or touch their own case. The CloudEvents
-        `id` claim and the effect commit in one transaction.
+        (`ItemUnlocated`) each open or touch their own case. A `StockHeld`
+        fact opens ONE case per held unit id (a re-emitted hold touches it);
+        a closing disposition (`RELEASE`, `RETURN_TO_VENDOR`, `SCRAP`) or a
+        release auto-resolves it with the outcome in the resolution note,
+        while a `REWORK` disposition keeps the unit held and the case open
+        (the arrival is recorded as an occurrence). The CloudEvents `id`
+        claim and the effect commit in one transaction.
       tags:
         - name: consumed
       message:
         oneOf:
           - $ref: "#/components/messages/DiscrepancyDetected"
           - $ref: "#/components/messages/ItemUnlocated"
+          - $ref: "#/components/messages/StockHeld"
+          - $ref: "#/components/messages/StockReleased"
+          - $ref: "#/components/messages/StockDispositioned"
+
+  warehouse.outbound-shipping.events:
+    description: |
+      outbound-shipping's integration topic. This service consumes ONLY
+      `PackageMissedLoad` under a stable consumer group read from env
+      `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` (ADR 0011). Every other
+      type is ignored.
+    publish:
+      operationId: consumeOutboundShippingEvents
+      summary: Consume packages that missed their load.
+      description: |
+        One problem-solve case per missed package: the dedup subject is the
+        `package_id` (the producer raises the fact at most once per package
+        and load), the site part of the key is the payload `site_id`. The
+        package, load, order, cutoff and detection instant the operator
+        needs are frozen on the case exactly as the producer shipped them.
+        The CloudEvents `id` claim and the effect commit in one transaction.
+      tags:
+        - name: consumed
+      message:
+        $ref: "#/components/messages/PackageMissedLoad"
 
 components:
   messages:
@@ -484,6 +568,8 @@ components:
         `correlated_event_id` are the full CloudEvents type and id of the
         correlated fact that satisfied the rule (for example an
         `OrderRepromised` for the same work unit within the window).
+        `note` (ADR 0012) is the closing fact's outcome when it carries one
+        (a held-stock disposition or release); null when it does not.
       contentType: application/cloudevents+json
       tags:
         - name: exceptioncase
@@ -506,7 +592,26 @@ components:
               rule_id: "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed->com.warehouse.wes.order-management.order.OrderRepromised"
               correlated_type: "com.warehouse.wes.order-management.order.OrderRepromised"
               correlated_event_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+              note: null
               at: "2026-10-21T09:20:00Z"
+        - name: heldStockDispositioned
+          summary: ADR 0012 — a RETURN_TO_VENDOR disposition closed the held-stock case.
+          payload:
+            specversion: "1.0"
+            id: "5c4b3a29-1e2f-4a89-b7c6-d5e4f3a2b1c0"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved"
+            subject: "case-2e3f4a5b-6c7d-4899-a0bc-def012345679"
+            time: "2026-11-12T10:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionAutoResolved:v1"
+            data:
+              case_id: "case-2e3f4a5b-6c7d-4899-a0bc-def012345679"
+              rule_id: "com.warehouse.wms.inventory-storage.stock.StockHeld->com.warehouse.wms.inventory-storage.stock.StockDispositioned"
+              correlated_type: "com.warehouse.wms.inventory-storage.stock.StockDispositioned"
+              correlated_event_id: "0b3a8d96-4c79-4e5a-9f60-2e410a5c3d78"
+              note: "disposition RETURN_TO_VENDOR"
+              at: "2026-11-12T10:30:00Z"
 
     ExceptionPolicyDeclared:
       x-no-consumer-reason: "policy declaration fact (append-only versions); no event consumer in v1"
@@ -862,6 +967,226 @@ components:
               actual: "10"
               at: "2026-10-24T09:00:00Z"
 
+    VisitRejected:
+      name: VisitRejected
+      title: VisitRejected (consumed, yard-management)
+      summary: A yard visit was refused at the gate.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.yardvisit.VisitRejected`,
+        source `/warehouse/yard-management`, subject and Kafka key = the visit
+        id. Dedup subject = `visit_id`; the site is `site_id`. ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/VisitRejectedEvent"
+      examples:
+        - name: sealMismatch
+          summary: A seal mismatch refused the visit.
+          payload:
+            specversion: "1.0"
+            id: "0a1f6c52-3d7e-4c1b-9a10-7e2b5d6c8f01"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.yardvisit.VisitRejected"
+            subject: "visit-3f9a"
+            time: "2026-11-05T08:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:VisitRejected:v1"
+            data:
+              visit_id: "visit-3f9a"
+              site_id: "SITE-1"
+              carrier_scac: "ABCD"
+              appointment_id: "appt-77c1"
+              reason: "SEAL_MISMATCH"
+              rejected_at: "2026-11-05T08:00:00Z"
+
+    SealExceptionRaised:
+      name: SealExceptionRaised
+      title: SealExceptionRaised (consumed, yard-management)
+      summary: A trailer seal differs from the one the carrier declared.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.trailer.SealExceptionRaised`,
+        source `/warehouse/yard-management`, subject and Kafka key = the trailer
+        id. Dedup subject = `<trailer_id>/<raised_at>` (a later visit of the
+        same trailer is its own case; the same raise re-published touches).
+        ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/SealExceptionRaisedEvent"
+      examples:
+        - name: sealMismatch
+          summary: Expected seal S-1001, found S-2002.
+          payload:
+            specversion: "1.0"
+            id: "1b2e7d63-4e8f-4d2c-8b21-8f3c6e7d9a02"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.trailer.SealExceptionRaised"
+            subject: "trl-5d20"
+            time: "2026-11-05T08:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:SealExceptionRaised:v1"
+            data:
+              trailer_id: "trl-5d20"
+              site_id: "SITE-1"
+              appointment_id: "appt-77c1"
+              expected_seal_number: "S-1001"
+              found_seal_number: "S-2002"
+              raised_at: "2026-11-05T08:30:00Z"
+
+    TrailerDwellExceeded:
+      name: TrailerDwellExceeded
+      title: TrailerDwellExceeded (consumed, yard-management)
+      summary: A trailer stayed on site past its dwell threshold.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded`,
+        source `/warehouse/yard-management`, subject and Kafka key = the trailer
+        id. The payload carries no instant: the dedup subject is
+        `<trailer_id>/<CloudEvents time>` (the producer raises once per
+        trailer and threshold crossing). ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/TrailerDwellExceededEvent"
+      examples:
+        - name: dryVan
+          summary: A dry van 120 minutes past its threshold.
+          payload:
+            specversion: "1.0"
+            id: "2c3f8e74-5f90-4e3d-9c32-9a4d7f8eab03"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded"
+            subject: "trl-5d20"
+            time: "2026-11-05T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:TrailerDwellExceeded:v1"
+            data:
+              trailer_id: "trl-5d20"
+              site_id: "SITE-1"
+              kind: "DRY_VAN"
+              dwell_minutes: 3000
+              threshold_minutes: 2880
+              location_code: "SPOT-04"
+
+    YardCheckClosed:
+      name: YardCheckClosed
+      title: YardCheckClosed (consumed, yard-management)
+      summary: A yard audit closed; each discrepancy becomes its own case.
+      description: |
+        `type` = `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed`,
+        source `/warehouse/yard-management`, subject and Kafka key = the yard
+        check id. ONE case per entry of `discrepancies`, keyed
+        `<yard_check_id>/<kind>/<location_code>/<trailer_id, else unit_number,
+        else ->`; the CloudEvents `id` is claimed once for the whole check. A
+        check without discrepancies opens nothing. ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/YardCheckClosedEvent"
+      examples:
+        - name: twoFindings
+          summary: One trailer missing, one unexpected.
+          payload:
+            specversion: "1.0"
+            id: "3d409f85-6aa1-4f4e-8d43-ab5e809fbc04"
+            source: "/warehouse/yard-management"
+            type: "com.warehouse.wms.yard-management.yardcheck.YardCheckClosed"
+            subject: "yck-9e41"
+            time: "2026-11-05T11:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:yard-management:events:YardCheckClosed:v1"
+            data:
+              yard_check_id: "yck-9e41"
+              site_id: "SITE-1"
+              closed_at: "2026-11-05T11:00:00Z"
+              discrepancies:
+                - kind: "MISSING"
+                  location_code: "SPOT-01"
+                  trailer_id: "trl-5d20"
+                  unit_number: "TR100"
+                - kind: "UNEXPECTED"
+                  location_code: "SPOT-02"
+                  trailer_id: null
+                  unit_number: "TR200"
+
+    DockAppointmentNoShow:
+      name: DockAppointmentNoShow
+      title: DockAppointmentNoShow (consumed, dock-scheduling)
+      summary: A carrier missed its dock appointment window.
+      description: |
+        `type` =
+        `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow`,
+        source `/warehouse/dock-scheduling`, subject and Kafka key = the
+        appointment id. Dedup subject = `appointment_id`; NO_SHOW is terminal in
+        dock-scheduling, so one case per appointment. ADR 0010.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/DockAppointmentNoShowEvent"
+      examples:
+        - name: inbound
+          summary: An inbound appointment whose grace period lapsed.
+          payload:
+            specversion: "1.0"
+            id: "4e51a096-7bb2-405f-9e54-bc6f91a0cd05"
+            source: "/warehouse/dock-scheduling"
+            type: "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow"
+            subject: "appt-77c1"
+            time: "2026-11-05T11:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:dock-scheduling:events:DockAppointmentNoShow:v1"
+            data:
+              appointment_id: "appt-77c1"
+              site_id: "SITE-1"
+              door_code: "DOOR-03"
+              direction: "INBOUND"
+              carrier_scac: "ABCD"
+              window_end: "2026-11-05T10:00:00Z"
+              version: 3
+
+    PackageMissedLoad:
+      name: PackageMissedLoad
+      title: PackageMissedLoad (consumed, outbound-shipping)
+      summary: A package was not loaded by its cutoff or by departure.
+      description: |
+        `type` =
+        `com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad`,
+        source `/warehouse/outbound-shipping`, dataschema
+        `urn:warehouse:outbound-shipping:events:PackageMissedLoad:v1`.
+        Subject and Kafka key = the package id. The producer raises it at
+        most once per package and load; `source_order_id` is omitted when
+        the manifest carried none. One problem-solve case per missed
+        package (ADR 0011).
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/PackageMissedLoadEvent"
+      examples:
+        - name: missed
+          summary: The 16:00 cutoff passes with pkg-2055 still staged.
+          payload:
+            specversion: "1.0"
+            id: "3f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e0b"
+            source: "/warehouse/outbound-shipping"
+            type: "com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad"
+            subject: "pkg-2055"
+            time: "2026-11-06T16:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:outbound-shipping:events:PackageMissedLoad:v1"
+            data:
+              package_id: "pkg-2055"
+              load_id: "load-7f3a"
+              site_id: "SITE-1"
+              source_order_id: "order-88423"
+              cutoff: "2026-11-06T16:00:00Z"
+              detected_at: "2026-11-06T16:00:00Z"
+              version: 2
+
     DiscrepancyDetected:
       name: DiscrepancyDetected
       title: DiscrepancyDetected (consumed, inventory-storage)
@@ -929,6 +1254,127 @@ components:
               sku: "SKU-1001"
               bin_id: "A-12-3"
               quantity: 3
+
+    StockHeld:
+      name: StockHeld
+      title: StockHeld (consumed, inventory-storage)
+      summary: A unit of stock was booked HELD; no usable quantity until dispositioned.
+      description: |
+        Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012; the
+        producer's own contract is inventory-storage ADR 0052). `type` =
+        `com.warehouse.wms.inventory-storage.stock.StockHeld`, source
+        `/warehouse/inventory-storage`, dataschema
+        `urn:warehouse:inventory-storage:events:StockHeld:v1`. Subject =
+        Kafka key = the held unit id. ONE case opens per held unit id: the
+        payload (sku, quantity, hold reason, receipt/ASN/line source) is
+        frozen on it; a re-emitted hold touches the same case.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/StockHeldEvent"
+      examples:
+        - name: damagedLineHeld
+          summary: Four damaged units of SKU-9 booked as a held unit off receipt rcpt-77 line 2.
+          payload:
+            specversion: "1.0"
+            id: "8f1e6b94-2a57-4c38-9d47-0c2f8e3a1b56"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.stock.StockHeld"
+            subject: "hu-4471"
+            time: "2026-11-12T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:StockHeld:v1"
+            data:
+              held_unit_id: "hu-4471"
+              sku: "SKU-9"
+              quantity: 4
+              reason: "DAMAGED"
+              receipt_id: "rcpt-77"
+              asn_number: "ASN-88"
+              line_no: 2
+              held_at: "2026-11-12T09:00:00Z"
+
+    StockReleased:
+      name: StockReleased
+      title: StockReleased (consumed, inventory-storage)
+      summary: A held unit was released; the quantity re-enters stock as a fresh staged receipt.
+      description: |
+        Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012).
+        The producer raises it ONLY on a `RELEASE` disposition, in addition
+        to `StockDispositioned` (inventory-storage ADR 0052), so in practice
+        it arrives as the second fact of a pair whose first fact already
+        closed the case; handling it as a close in its own right covers
+        either arrival order. It auto-resolves the held unit's case with a
+        released note. `type` =
+        `com.warehouse.wms.inventory-storage.stock.StockReleased`, subject =
+        Kafka key = the held unit id.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/StockReleasedEvent"
+      examples:
+        - name: releasedBackToStock
+          summary: The held unit was released; the case auto-resolves.
+          payload:
+            specversion: "1.0"
+            id: "9a2f7c85-3b68-4d49-8e5f-1d309f4b2c67"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.stock.StockReleased"
+            subject: "hu-4471"
+            time: "2026-11-12T10:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:StockReleased:v1"
+            data:
+              held_unit_id: "hu-4471"
+              sku: "SKU-9"
+              quantity: 4
+              receipt_id: "rcpt-77"
+              asn_number: "ASN-88"
+              line_no: 2
+              released_at: "2026-11-12T10:00:00Z"
+
+    StockDispositioned:
+      name: StockDispositioned
+      title: StockDispositioned (consumed, inventory-storage)
+      summary: A disposition was decided for a held unit.
+      description: |
+        Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012).
+        Raised for all four dispositions (inventory-storage ADR 0052):
+        `RELEASE`, `RETURN_TO_VENDOR` and `SCRAP` end the hold, so the case
+        auto-resolves with the disposition in the resolution note; `REWORK`
+        KEEPS the unit held, so the case stays open and the arrival is
+        recorded as an occurrence. `type` =
+        `com.warehouse.wms.inventory-storage.stock.StockDispositioned`,
+        subject = Kafka key = the held unit id.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/StockDispositionedEvent"
+      examples:
+        - name: returnedToVendor
+          summary: The damaged units go back to the vendor; the case auto-resolves.
+          payload:
+            specversion: "1.0"
+            id: "0b3a8d96-4c79-4e5a-9f60-2e410a5c3d78"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.stock.StockDispositioned"
+            subject: "hu-4471"
+            time: "2026-11-12T10:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:StockDispositioned:v1"
+            data:
+              held_unit_id: "hu-4471"
+              sku: "SKU-9"
+              quantity: 4
+              disposition: "RETURN_TO_VENDOR"
+              reason: "DAMAGED"
+              receipt_id: "rcpt-77"
+              asn_number: "ASN-88"
+              line_no: 2
+              decided_at: "2026-11-12T10:30:00Z"
 
 
     ExceptionOpenedAnalytics:
@@ -1255,6 +1701,7 @@ components:
                 rule_id: { type: string, description: The policy's auto-resolve rule that fired. }
                 correlated_type: { type: string, description: The full CloudEvents type of the correlated fact. }
                 correlated_event_id: { type: string, description: The CloudEvents id of the correlated fact. }
+                note: { type: string, nullable: true, description: The closing fact's outcome when it carries one (ADR 0012); null when it does not. }
                 at: { type: string, format: date-time }
 
     ExceptionPolicyDeclaredEvent:
@@ -1409,6 +1856,112 @@ components:
                 actual: { type: string }
                 at: { type: string, format: date-time }
 
+    VisitRejectedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [visit_id, site_id, reason, rejected_at]
+              properties:
+                visit_id: { type: string }
+                site_id: { type: string }
+                carrier_scac: { type: [string, "null"] }
+                appointment_id: { type: [string, "null"] }
+                reason: { type: string, description: "APPOINTMENT_REQUIRED, UNKNOWN_APPOINTMENT, SEAL_MISMATCH, TRAILER_ALREADY_ON_SITE or SITE_REQUEST; kept in the frozen payload, not routed on." }
+                rejected_at: { type: string, format: date-time }
+
+    SealExceptionRaisedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [trailer_id, site_id, raised_at]
+              properties:
+                trailer_id: { type: string }
+                site_id: { type: string }
+                appointment_id: { type: [string, "null"] }
+                expected_seal_number: { type: [string, "null"] }
+                found_seal_number: { type: [string, "null"] }
+                raised_at: { type: string, format: date-time }
+
+    TrailerDwellExceededEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [trailer_id, site_id, dwell_minutes, threshold_minutes]
+              properties:
+                trailer_id: { type: string }
+                site_id: { type: string }
+                kind: { type: string, description: "The trailer kind whose threshold was crossed (DRY_VAN, REEFER, FLATBED, CONTAINER)." }
+                dwell_minutes: { type: integer, minimum: 0 }
+                threshold_minutes: { type: integer, minimum: 0 }
+                location_code: { type: [string, "null"] }
+
+    YardCheckClosedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [yard_check_id, site_id, closed_at, discrepancies]
+              properties:
+                yard_check_id: { type: string }
+                site_id: { type: string }
+                closed_at: { type: string, format: date-time }
+                discrepancies:
+                  type: array
+                  description: One case per entry. May be empty (a clean check).
+                  items:
+                    type: object
+                    required: [kind, location_code]
+                    properties:
+                      kind: { type: string, description: "MISSING, UNEXPECTED or WRONG_LOCATION today; any non-blank string is accepted." }
+                      location_code: { type: string }
+                      trailer_id: { type: [string, "null"] }
+                      unit_number: { type: [string, "null"] }
+
+    DockAppointmentNoShowEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [appointment_id, site_id]
+              properties:
+                appointment_id: { type: string }
+                site_id: { type: string }
+                door_code: { type: string }
+                direction: { type: string, enum: [INBOUND, OUTBOUND] }
+                carrier_scac: { type: [string, "null"] }
+                window_end: { type: string, format: date-time }
+                version: { type: integer, minimum: 1 }
+
+    PackageMissedLoadEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [package_id, load_id, site_id, cutoff, detected_at, version]
+              properties:
+                package_id: { type: string, description: The missed package; the dedup subject. }
+                load_id: { type: string, description: The load the package missed. }
+                site_id: { type: string, description: The site part of the dedup key. }
+                source_order_id: { type: string, description: Omitted when the manifest carried none. }
+                cutoff: { type: string, format: date-time }
+                detected_at: { type: string, format: date-time }
+                version: { type: integer, minimum: 1, description: The aggregate version after the change; not part of the dedup key. }
+
     DiscrepancyDetectedEvent:
       allOf:
         - $ref: "#/components/schemas/CloudEventEnvelope"
@@ -1435,3 +1988,59 @@ components:
                 sku: { type: string }
                 bin_id: { type: string, description: The bin the stock was believed to be in. }
                 quantity: { type: integer, minimum: 1, description: Quantity that could not be accounted for. }
+
+    StockHeldEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [held_unit_id, sku, quantity, reason, receipt_id, asn_number, line_no, held_at]
+              properties:
+                held_unit_id: { type: string, description: The held unit id (the subject). }
+                sku: { type: string, description: The SKU held. }
+                quantity: { type: integer, minimum: 1, description: Eaches held. }
+                reason: { type: string, enum: [DAMAGED, QC_PENDING, SUSPECT, OTHER], description: Why it is held. }
+                receipt_id: { type: string, description: The inbound receipt the quantity came from. }
+                asn_number: { type: string, description: The ASN of the receipt. }
+                line_no: { type: integer, minimum: 1, description: The receipt line. }
+                owner_ref: { type: string, description: Owner of the stock. Omitted for fleet-owned stock. }
+                sscc: { type: string, description: The carton SSCC of the line. Omitted when it had none. }
+                held_at: { type: string, format: date-time, description: When the unit was held. }
+
+    StockReleasedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [held_unit_id, sku, quantity, receipt_id, asn_number, line_no, released_at]
+              properties:
+                held_unit_id: { type: string, description: The held unit id (the subject). }
+                sku: { type: string, description: The SKU held. }
+                quantity: { type: integer, minimum: 1, description: Eaches released. }
+                receipt_id: { type: string, description: The inbound receipt the quantity came from. }
+                asn_number: { type: string, description: The ASN of the receipt. }
+                line_no: { type: integer, minimum: 1, description: The receipt line. }
+                released_at: { type: string, format: date-time, description: When the unit was released. }
+
+    StockDispositionedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [held_unit_id, sku, quantity, disposition, reason, receipt_id, asn_number, line_no, decided_at]
+              properties:
+                held_unit_id: { type: string, description: The held unit id (the subject). }
+                sku: { type: string, description: The SKU held. }
+                quantity: { type: integer, minimum: 1, description: Eaches dispositioned. }
+                disposition: { type: string, enum: [RELEASE, RETURN_TO_VENDOR, SCRAP, REWORK], description: The decision. }
+                reason: { type: string, enum: [DAMAGED, QC_PENDING, SUSPECT, OTHER], description: The hold reason after the decision. }
+                receipt_id: { type: string, description: The inbound receipt the quantity came from. }
+                asn_number: { type: string, description: The ASN of the receipt. }
+                line_no: { type: integer, minimum: 1, description: The receipt line. }
+                decided_at: { type: string, format: date-time, description: When it was decided. }

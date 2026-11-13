@@ -13,14 +13,16 @@ import (
 	"github.com/claudioed/exception-management/internal/domain/shared"
 )
 
-// consumeWorld wires ConsumeFact (and ConsumeCorrelation) over the memory
-// doubles and declares a policy per source type a test consumes.
+// consumeWorld wires ConsumeFact (and ConsumeCorrelation, and the
+// held-stock closing use case) over the memory doubles and declares a
+// policy per source type a test consumes.
 type consumeWorld struct {
 	cases     *memory.Cases
 	policies  *memory.Policies
 	events    *memory.Events
 	consume   *usecases.ConsumeFact
 	correlate *usecases.ConsumeCorrelation
+	settle    *usecases.AutoResolveHeldStock
 	now       time.Time
 }
 
@@ -39,6 +41,10 @@ func newConsumeWorld(t *testing.T, sourceTypes ...string) *consumeWorld {
 	}
 	w.consume = &usecases.ConsumeFact{Processed: memory.NewProcessedEvents(), OpenOrTouch: open}
 	w.correlate = &usecases.ConsumeCorrelation{Processed: memory.NewProcessedEvents(), AutoResolve: auto}
+	w.settle = &usecases.AutoResolveHeldStock{
+		Processed: memory.NewProcessedEvents(), Cases: w.cases, Events: w.events,
+		Clock: memory.Clock{T: w.now},
+	}
 	declare := &usecases.DeclareExceptionPolicy{
 		Policies: w.policies, Events: w.events, Clock: memory.Clock{T: w.now},
 	}

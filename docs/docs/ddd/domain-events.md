@@ -85,6 +85,15 @@ skipped (WARN, commit past).
 | `wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | `warehouse.inbound-receiving.events` | receipt id + sscc or `-` + kind | One case per (receipt, sscc, kind); UnlabelledCarton/CartonOverLimit route to receiving-lead, every other kind to problem-solve (ADR 0006) |
 | `wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.events` | bin id | Promoted by the producer (PR #239, merged 2026-10-21) |
 | `wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.events` | stock unit id | Same promotion |
+| `wms.inventory-storage.stock.StockHeld` | `warehouse.inventory.events` | held unit id | ONE case per held unit under the topic's second group `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP`; the sku/quantity/reason/receipt refs freeze on the case (ADR 0012) |
+| `wms.inventory-storage.stock.StockReleased` | `warehouse.inventory.events` | held unit id (close) | Auto-resolves the held unit's case; rides a RELEASE disposition in addition to StockDispositioned (ADR 0012) |
+| `wms.inventory-storage.stock.StockDispositioned` | `warehouse.inventory.events` | held unit id (close) | RELEASE/RETURN_TO_VENDOR/SCRAP auto-resolve with the disposition in the note; REWORK keeps the case open (ADR 0012) |
+| `wms.yard-management.yardvisit.VisitRejected` | `warehouse.yard-management.events` | visit id | One case per rejected visit; default queue `yard-supervisor` (ADR 0010) |
+| `wms.yard-management.trailer.SealExceptionRaised` | `warehouse.yard-management.events` | trailer id + `raised_at` | A later raise for the same trailer is its own case; the same raise re-published touches (ADR 0010) |
+| `wms.yard-management.trailer.TrailerDwellExceeded` | `warehouse.yard-management.events` | trailer id + CloudEvents time | The payload carries no instant of its own (ADR 0010) |
+| `wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | yard check id + kind + location + trailer id, unit number or `-` | One case per discrepancy, one claimed event id for the whole check (ADR 0010) |
+| `wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | appointment id | One case per appointment; default queue `dock-planner` (ADR 0010) |
+| `wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | package id | One problem-solve case per missed package (site_id feeds the dedup key); the load/order/cutoff stay in the frozen payload (ADR 0011) |
 | `wes.order-management.order.OrderRepromised` | `warehouse.order-management.events` | — | **Correlation only, never a case source**: the correlated fact of the auto-resolve rule |
 
 **Not consumed (roadmap):** workforce-management `PathUnderstaffed`,

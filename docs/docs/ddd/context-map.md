@@ -3,7 +3,7 @@ id: context-map
 title: Context map
 sidebar_label: Context map
 sidebar_position: 13
-description: The exception-management context map — nine upstream producers over six consumer groups, the conformist stance, downstream readers, and the two planned edges.
+description: The exception-management context map — ten upstream producers over eleven consumer groups (the inventory topic is read by two), the conformist stance, downstream readers, and the two planned edges.
 ---
 
 # Context map
@@ -16,6 +16,8 @@ flowchart TB
     OM["order-management<br/>OrderRepromised (correlation only)"]
     RP["returns-processing<br/>UnexpectedReturnReceived"]
     IS["inventory-storage<br/>DiscrepancyDetected, ItemUnlocated"]
+    YM["yard-management<br/>VisitRejected, SealExceptionRaised,<br/>TrailerDwellExceeded, YardCheckClosed"]
+    DS["dock-scheduling<br/>DockAppointmentNoShow"]
     EM["exception-management"]
     AG(["warehouse-ops-agent<br/>(read-only MCP)"])
     CON(["console + operators<br/>(REST reads)"])
@@ -26,6 +28,8 @@ flowchart TB
     OM --> EM
     RP --> EM
     IS --> EM
+    YM --> EM
+    DS --> EM
     EM --> AG
     EM --> CON
 
@@ -51,6 +55,10 @@ live REST or MCP call to a sibling at request time, ever.
 | returns-processing | `warehouse.returns-processing.events` | `returnreceipt.UnexpectedReturnReceived` | `RETURNS_EXCEPTIONS_CONSUMER_GROUP` | Live: the producer shipped (its develop publishes the type) |
 | inbound-receiving | `warehouse.inbound-receiving.events` | `receipt.CartonDiscrepancyRaised` | `CARTON_DISCREPANCY_CONSUMER_GROUP` | Live: routed by kind (ADR 0006) |
 | inventory-storage | `warehouse.inventory.events` | `bin.DiscrepancyDetected`, `stock.ItemUnlocated` | `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | Live: promoted by the producer's PR #239 (merged 2026-10-21) |
+| inventory-storage (held stock) | `warehouse.inventory.events` | `stock.StockHeld` (opens), `stock.StockReleased`, `stock.StockDispositioned` (close) | `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` | Live: one case per held unit, auto-resolved on disposition/release; REWORK keeps the case open (ADR 0012, pinned to inventory-storage ADR 0052) |
+| yard-management | `warehouse.yard-management.events` | `yardvisit.VisitRejected`, `trailer.SealExceptionRaised`, `trailer.TrailerDwellExceeded`, `yardcheck.YardCheckClosed` | `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | Pinned consumer-first from the producer's contract (ADR 0010); one case per discrepancy of a yard check |
+| dock-scheduling | `warehouse.dock-scheduling.events` | `dockappointment.DockAppointmentNoShow` | `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` | Pinned consumer-first from the producer's contract (ADR 0010) |
+| outbound-shipping | `warehouse.outbound-shipping.events` | `shippingpackage.PackageMissedLoad` | `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | Live: one problem-solve case per missed package (ADR 0011) |
 
 ADR 0003/0004 still describe the inventory and package types as "pending
 the producer's promotion PR"; those promotions have since merged — the ADR

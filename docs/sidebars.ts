@@ -133,6 +133,16 @@ const sidebars: SidebarsConfig = {
           label: '0009 Agent authority levels and complete MCP surface',
           href: '/docs/adr/0009-agent-authority-levels-and-complete-mcp-surface',
         },
+        {
+          type: 'link',
+          label: '0010 Yard exceptions consumers and routing',
+          href: '/docs/adr/0010-yard-exceptions-consumers-and-routing',
+        },
+        {
+          type: 'link',
+          label: '0011 PackageMissedLoad consumer',
+          href: '/docs/adr/0011-package-missed-load-consumer',
+        },
       ],
     },
   ],
