@@ -31,6 +31,7 @@ var domainErrors = map[string]error{
 	"ErrBlankAssignee":       exceptioncase.ErrBlankAssignee,
 	"ErrBlankQueue":          exceptioncase.ErrBlankQueue,
 	"ErrPolicyUndeclared":    usecases.ErrPolicyUndeclared,
+	"ErrNoEventID":           usecases.ErrNoEventID,
 }
 
 // registerSetupSteps registers the clock and policy-declaration steps.
