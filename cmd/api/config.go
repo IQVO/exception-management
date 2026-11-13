@@ -51,7 +51,7 @@ func brokersFromEnv() []string {
 	return brokers
 }
 
-// consumerGroupEnvs are the ten pinned consumer-group variables of
+// consumerGroupEnvs are the eleven pinned consumer-group variables of
 // .claude/rules/integration-events.md. They are read and validated at boot
 // even though the consumers themselves are a later build step on this
 // binary: fail-closed now, so a deployment cannot go live missing a group id
@@ -62,6 +62,7 @@ var consumerGroupEnvs = []string{
 	"NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP",
 	"ORDER_CORRELATION_CONSUMER_GROUP",
 	"INVENTORY_EXCEPTIONS_CONSUMER_GROUP",
+	"HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP",
 	"RETURNS_EXCEPTIONS_CONSUMER_GROUP",
 	"CARTON_DISCREPANCY_CONSUMER_GROUP",
 	"YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP",

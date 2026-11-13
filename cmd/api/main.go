@@ -1,9 +1,10 @@
 // Command api is exception-management's composition root. It wires the whole
 // service: the REST surface (every route of apis/openapi.yaml on chi, the
 // Idempotency-Key middleware over the Postgres store, the NUL guard, the
-// readiness gate), the use cases over the real Postgres adapters, the nine
+// readiness gate), the use cases over the real Postgres adapters, the ten
 // inbound Kafka fact consumers (each under its pinned consumer-group
-// variable), the SLA sweep ticker and the transactional-outbox relay (the
+// variable; the held-stock group reads the inventory topic a second time,
+// ADR 0012), the SLA sweep ticker and the transactional-outbox relay (the
 // event side leaves the service ONLY through it, ADR 0004/0005). A consumer
 // that dies fails run — the process exits non-zero and the pod restarts.
 //
@@ -23,6 +24,7 @@
 //	NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP
 //	ORDER_CORRELATION_CONSUMER_GROUP
 //	INVENTORY_EXCEPTIONS_CONSUMER_GROUP
+//	HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP
 //	RETURNS_EXCEPTIONS_CONSUMER_GROUP
 //	CARTON_DISCREPANCY_CONSUMER_GROUP
 //	YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP
@@ -124,10 +126,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	// setting, never the unlimited default by omission.
 	sink, relay := newRelay(cfg, pool, logger)
 
-	// The inbound side: ten consumers (each under its pinned group id) and
-	// the SLA sweep ticker. A consumer death lands on errCh: run returns it,
-	// the process exits non-zero, the pod restarts.
-	errCh := make(chan error, 11)
+	// The inbound side: eleven consumers (each under its pinned group id)
+	// and the SLA sweep ticker. A consumer death lands on errCh: run
+	// returns it, the process exits non-zero, the pod restarts.
+	errCh := make(chan error, 12)
 	go func() {
 		logger.Info("http server listening", "addr", cfg.httpAddr)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

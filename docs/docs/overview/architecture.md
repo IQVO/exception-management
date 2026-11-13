@@ -75,7 +75,7 @@ Two, in separate domain packages ([ADR 0002](/docs/adr/0002-aggregates-and-polic
 
 | Binary | Serves | Never does |
 | --- | --- | --- |
-| `cmd/api` | REST `:8080`, the nine fact consumers, the correlation consumer, the SLA sweeper, the outbox relay | — |
+| `cmd/api` | REST `:8080`, the ten fact consumers (the held-stock group reads the inventory topic a second time, ADR 0012), the correlation consumer, the SLA sweeper, the outbox relay | — |
 | `cmd/mcp` | read-only MCP over Streamable HTTP `:8090` (`/mcp`, `GET /healthz`) | never writes, never dials Kafka, never runs the relay or the sweeper |
 | `cmd/a2a` | read-only A2A agent, JSON-RPC over HTTP `:8093` (`/`, `/a2a`, the card at `/.well-known/agent-card.json`, `GET /healthz`) | never writes, never dials Kafka, never runs the relay or the sweeper |
 

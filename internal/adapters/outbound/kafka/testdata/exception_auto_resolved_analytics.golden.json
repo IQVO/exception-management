@@ -12,6 +12,7 @@
     "rule_id": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed->com.warehouse.wes.order-management.order.OrderRepromised",
     "correlated_type": "com.warehouse.wes.order-management.order.OrderRepromised",
     "correlated_event_id": "f3e2d1c0-9b8a-4c5d-6e7f-8a9b0c1d2e3f",
+    "note": null,
     "at": "2026-10-21T09:35:00Z"
   }
 }

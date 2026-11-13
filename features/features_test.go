@@ -177,5 +177,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	registerEventAuditSteps(sc, w)
 	registerCartonSteps(sc, w)
 	registerYardSteps(sc, w)
+	registerHeldStockSteps(sc, w)
 	registerWave2Steps(sc, w)
 }

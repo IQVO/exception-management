@@ -80,6 +80,7 @@ ops-agent work cases instead of raw events.
 | `warehouse.returns-processing.events` | `...returnreceipt.UnexpectedReturnReceived` — `RETURNS_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | `warehouse.inbound-receiving.events` | `...receipt.CartonDiscrepancyRaised` — `CARTON_DISCREPANCY_CONSUMER_GROUP` | Conformist |
 | `warehouse.inventory.events` | `...bin.DiscrepancyDetected`, `...stock.ItemUnlocated` — `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| `warehouse.inventory.events` (second group) | `...stock.StockHeld` (opens), `...stock.StockReleased`, `...stock.StockDispositioned` (close) — `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012) | Conformist |
 | `warehouse.yard-management.events` | `...yardvisit.VisitRejected`, `...trailer.SealExceptionRaised`, `...trailer.TrailerDwellExceeded`, `...yardcheck.YardCheckClosed` — `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | `warehouse.dock-scheduling.events` | `...dockappointment.DockAppointmentNoShow` — `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
 | `warehouse.outbound-shipping.events` | `...shippingpackage.PackageMissedLoad` — `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` | Conformist |

@@ -46,7 +46,7 @@ spec:
           # MIGRATIONS_DATABASE_URL. cmd/a2a has no auth env, builds no
           # outbox/unit of work (it can never write: the A2A agent is
           # read-only like the MCP surface), starts no relay, runs no SLA
-          # sweeper, runs none of the nine fact consumers and never dials Kafka
+          # sweeper, runs none of the ten fact consumers and never dials Kafka
           # (no KAFKA_BROKERS, no EVENT_PUBLISHER, no consumer groups here).
           env:
             - name: A2A_ADDR

@@ -18,9 +18,10 @@ import (
 	"github.com/claudioed/exception-management/internal/application/usecases"
 )
 
-// The inbound side of the composition root: the nine fact consumers (and the correlation consumer) of
-// .claude/rules/integration-events.md and the SLA sweep ticker. All of it
-// runs on the real Postgres adapters — no memory doubles reach cmd/.
+// The inbound side of the composition root: the ten fact consumers (and
+// the correlation consumer) of .claude/rules/integration-events.md and the
+// SLA sweep ticker. All of it runs on the real Postgres adapters — no
+// memory doubles reach cmd/.
 
 // inboundDrainTimeout bounds how long shutdown waits for the consumers and
 // the sweeper to return after the context is cancelled.
@@ -38,9 +39,9 @@ type inboundRuntime struct {
 	sweepDone chan struct{}
 }
 
-// buildConsumers wires the use cases over the Postgres adapters and the ten
-// consumers over the pinned group ids (each id from its own environment
-// variable, never a literal — .claude/rules/integration-events.md).
+// buildConsumers wires the use cases over the Postgres adapters and the
+// eleven consumers over the pinned group ids (each id from its own
+// environment variable, never a literal — .claude/rules/integration-events.md).
 func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, clock ports.Clock, logger *slog.Logger) []*kafkain.Consumer {
 	cases := postgres.NewCaseRepo(pool)
 	policies := postgres.NewPolicyRepo(pool)
@@ -53,6 +54,10 @@ func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, cl
 			IDs: system.CaseIDs{}, Clock: clock, UnitOfWork: uow,
 		},
 		UnitOfWork: uow,
+	}
+	settle := &usecases.AutoResolveHeldStock{
+		Processed: processed, Cases: cases, Events: events,
+		Clock: clock, UnitOfWork: uow,
 	}
 	openCarton := &usecases.OpenCartonDiscrepancy{Consume: consume}
 	openYardCheck := &usecases.OpenYardCheckDiscrepancies{Processed: processed, OpenOrTouch: consume.OpenOrTouch, UnitOfWork: uow}
@@ -69,6 +74,7 @@ func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, cl
 		kafkain.NewWorkPlanningExceptionsConsumer(cfg.brokers, g["WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewNetworkFulfillmentExceptionsConsumer(cfg.brokers, g["NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewInventoryExceptionsConsumer(cfg.brokers, g["INVENTORY_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
+		kafkain.NewHeldStockConsumer(cfg.brokers, g["HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP"], consume, settle, logger),
 		kafkain.NewReturnsExceptionsConsumer(cfg.brokers, g["RETURNS_EXCEPTIONS_CONSUMER_GROUP"], consume, logger),
 		kafkain.NewCartonDiscrepancyConsumer(cfg.brokers, g["CARTON_DISCREPANCY_CONSUMER_GROUP"], openCarton, logger),
 		kafkain.NewYardExceptionsConsumer(cfg.brokers, g["YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP"], consume, openYardCheck, logger),
@@ -78,12 +84,12 @@ func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, cl
 	}
 }
 
-// startInbound boots the ten consumers and the SLA sweep ticker. A consumer
-// that returns anything other than ctx.Cancellation is a DEATH: it lands on
-// errCh, run returns the error and the process exits non-zero — the pod
-// restarts (the fleet rule; a silently dead consumer is a silently missed
-// exception). The sweeper only ever logs: a failed sweep is retried by the
-// next tick.
+// startInbound boots the eleven consumers and the SLA sweep ticker. A
+// consumer that returns anything other than ctx.Cancellation is a DEATH:
+// it lands on errCh, run returns the error and the process exits non-zero
+// — the pod restarts (the fleet rule; a silently dead consumer is a
+// silently missed exception). The sweeper only ever logs: a failed sweep
+// is retried by the next tick.
 func startInbound(ctx context.Context, cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, clock ports.Clock, logger *slog.Logger, errCh chan<- error) *inboundRuntime {
 	consumers := buildConsumers(cfg, pool, uow, clock, logger)
 	rt := &inboundRuntime{consumers: consumers, sweepDone: make(chan struct{})}

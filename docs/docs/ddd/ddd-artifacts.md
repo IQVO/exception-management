@@ -16,7 +16,7 @@ marked *roadmap* where they appear.
 | --- | --- | --- |
 | Core Domain Chart | [Core domain chart](/docs/ddd/core-domain-chart) | Where exception-management sits in the fleet's core/supporting/generic split, and what would make it core. |
 | Bounded Context Canvas | [Bounded context canvas](/docs/ddd/bounded-context-canvas) | The full canvas: name, purpose, classification, inbound/outbound communication, ubiquitous language, decisions, assumptions, verification. |
-| Context Map | [Context map](/docs/ddd/context-map) | The nine upstream producers, the conformist stance, the downstream readers, and the two planned edges. |
+| Context Map | [Context map](/docs/ddd/context-map) | The ten upstream producers, the conformist stance, the downstream readers, and the two planned edges. |
 | Aggregate Design Canvas | [Aggregate design canvas](/docs/ddd/aggregate-design-canvas) | The ExceptionCase and ExceptionPolicy aggregates: invariants, boundaries, consistency, lifecycle. |
 | Domain Message Flow | [Domain message flow](/docs/ddd/domain-message-flow) | A fact's journey from a producer's topic to a resolved case and the events that announce it. |
 | EventStorming | [EventStorming](/docs/ddd/eventstorming) | Big-picture timeline of the domain events this context owns and consumes. |

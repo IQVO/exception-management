@@ -17,7 +17,7 @@ and frontend (the exceptions_mfe Module Federation remote, default off). The
 enabled renders run the components TOGETHER.
 
 It also asserts the real runtime: the mandatory env (database secret, brokers,
-the nine pinned consumer-group ids) is rendered, no *_MODE variable is ever
+the eleven pinned consumer-group ids) is rendered, no *_MODE variable is ever
 rendered (this service has no modes), and unset optional values stay absent so
 the binary's defaults apply. The frontend is a static nginx pod: it carries NO
 env at all (never a DSN, never brokers, never a consumer group).
@@ -55,7 +55,8 @@ API_ENV = (
     "HTTP_ADDR", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL", "KAFKA_BROKERS",
     "FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP",
     "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
-    "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
+    "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP",
+    "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
     "CARTON_DISCREPANCY_CONSUMER_GROUP",
     "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP",
     "OUTBOX_RELAY_INTERVAL", "OUTBOX_MAX_ATTEMPTS", "SLA_SWEEP_INTERVAL", "SHUTDOWN_DRAIN_DELAY",
@@ -180,8 +181,9 @@ def check_mcp(dep: dict | None, failures: list[str]) -> None:
         "SLA_SWEEP_INTERVAL",
         "FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP",
         "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
-        "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
-    "CARTON_DISCREPANCY_CONSUMER_GROUP",
+        "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP",
+        "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
+        "CARTON_DISCREPANCY_CONSUMER_GROUP",
         "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP",
     } & env
     stray.update(mode_names(env_names(dep)))
@@ -204,7 +206,8 @@ def check_a2a(dep: dict | None, failures: list[str]) -> None:
         "SLA_SWEEP_INTERVAL",
         "FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP",
         "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "ORDER_CORRELATION_CONSUMER_GROUP",
-        "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
+        "INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP",
+        "RETURNS_EXCEPTIONS_CONSUMER_GROUP",
         "CARTON_DISCREPANCY_CONSUMER_GROUP",
         "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP",
     } & env
@@ -239,6 +242,7 @@ def check_env(api: dict, failures: list[str]) -> None:
         ("NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP", "exception-management-network-fulfillment"),
         ("ORDER_CORRELATION_CONSUMER_GROUP", "exception-management-order-correlation"),
         ("INVENTORY_EXCEPTIONS_CONSUMER_GROUP", "exception-management-inventory"),
+        ("HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP", "exception-management-held-stock"),
         ("RETURNS_EXCEPTIONS_CONSUMER_GROUP", "exception-management-returns"),
         ("CARTON_DISCREPANCY_CONSUMER_GROUP", "exception-management-carton-discrepancy"),
         ("YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP", "exception-management-yard-management"),

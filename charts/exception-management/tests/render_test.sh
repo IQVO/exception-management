@@ -43,6 +43,7 @@ env_value() { # env_value <rendered> <NAME>
 [[ "$(env_value "$deployment" NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-network-fulfillment" ]] || fail "NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.networkFulfillmentExceptionsConsumerGroup"
 [[ "$(env_value "$deployment" ORDER_CORRELATION_CONSUMER_GROUP)" == "exception-management-order-correlation" ]] || fail "ORDER_CORRELATION_CONSUMER_GROUP is not rendered from config.orderCorrelationConsumerGroup"
 [[ "$(env_value "$deployment" INVENTORY_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-inventory" ]] || fail "INVENTORY_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.inventoryExceptionsConsumerGroup"
+[[ "$(env_value "$deployment" HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-held-stock" ]] || fail "HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.heldStockExceptionsConsumerGroup"
 [[ "$(env_value "$deployment" RETURNS_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-returns" ]] || fail "RETURNS_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.returnsExceptionsConsumerGroup"
 [[ "$(env_value "$deployment" CARTON_DISCREPANCY_CONSUMER_GROUP)" == "exception-management-carton-discrepancy" ]] || fail "CARTON_DISCREPANCY_CONSUMER_GROUP is not rendered from config.cartonDiscrepancyConsumerGroup"
 [[ "$(env_value "$deployment" YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP)" == "exception-management-yard-management" ]] || fail "YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP is not rendered from config.yardManagementExceptionsConsumerGroup"
@@ -51,7 +52,7 @@ grep -A4 'name: DATABASE_URL$' <<<"$deployment" | grep -q 'secretKeyRef:' || fai
 grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$deployment" | grep -q 'optional: true' || fail "MIGRATIONS_DATABASE_URL must be an optional secretKeyRef"
 for var in KAFKA_BROKERS FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP \
   NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP ORDER_CORRELATION_CONSUMER_GROUP \
-  INVENTORY_EXCEPTIONS_CONSUMER_GROUP RETURNS_EXCEPTIONS_CONSUMER_GROUP CARTON_DISCREPANCY_CONSUMER_GROUP \
+  INVENTORY_EXCEPTIONS_CONSUMER_GROUP HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP RETURNS_EXCEPTIONS_CONSUMER_GROUP CARTON_DISCREPANCY_CONSUMER_GROUP \
   YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP; do
   grep -q "^  $var: " <<<"$configmap" || fail "the ConfigMap does not carry $var"
 done
@@ -64,6 +65,7 @@ renamed="$(render_only deployment.yaml "${base[@]}" \
   --set config.networkFulfillmentExceptionsConsumerGroup=g-nf \
   --set config.orderCorrelationConsumerGroup=g-oc \
   --set config.inventoryExceptionsConsumerGroup=g-inv \
+  --set config.heldStockExceptionsConsumerGroup=g-held \
   --set config.returnsExceptionsConsumerGroup=g-ret \
   --set config.cartonDiscrepancyConsumerGroup=g-carton \
   --set config.yardManagementExceptionsConsumerGroup=g-yard \
@@ -73,6 +75,7 @@ renamed="$(render_only deployment.yaml "${base[@]}" \
 [[ "$(env_value "$renamed" NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP)" == "g-nf" ]] || fail "config.networkFulfillmentExceptionsConsumerGroup does not reach NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" ORDER_CORRELATION_CONSUMER_GROUP)" == "g-oc" ]] || fail "config.orderCorrelationConsumerGroup does not reach ORDER_CORRELATION_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" INVENTORY_EXCEPTIONS_CONSUMER_GROUP)" == "g-inv" ]] || fail "config.inventoryExceptionsConsumerGroup does not reach INVENTORY_EXCEPTIONS_CONSUMER_GROUP"
+[[ "$(env_value "$renamed" HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP)" == "g-held" ]] || fail "config.heldStockExceptionsConsumerGroup does not reach HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" RETURNS_EXCEPTIONS_CONSUMER_GROUP)" == "g-ret" ]] || fail "config.returnsExceptionsConsumerGroup does not reach RETURNS_EXCEPTIONS_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" CARTON_DISCREPANCY_CONSUMER_GROUP)" == "g-carton" ]] || fail "config.cartonDiscrepancyConsumerGroup does not reach CARTON_DISCREPANCY_CONSUMER_GROUP"
 [[ "$(env_value "$renamed" YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP)" == "g-yard" ]] || fail "config.yardManagementExceptionsConsumerGroup does not reach YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP"
@@ -194,6 +197,7 @@ expect_refusal "an empty work-planning group" "config.workPlanningExceptionsCons
 expect_refusal "an empty network-fulfillment group" "config.networkFulfillmentExceptionsConsumerGroup" "${base[@]}" --set config.networkFulfillmentExceptionsConsumerGroup=
 expect_refusal "an empty order-correlation group" "config.orderCorrelationConsumerGroup" "${base[@]}" --set config.orderCorrelationConsumerGroup=
 expect_refusal "an empty inventory group" "config.inventoryExceptionsConsumerGroup" "${base[@]}" --set config.inventoryExceptionsConsumerGroup=
+expect_refusal "an empty held-stock group" "config.heldStockExceptionsConsumerGroup" "${base[@]}" --set config.heldStockExceptionsConsumerGroup=
 expect_refusal "an empty returns group" "config.returnsExceptionsConsumerGroup" "${base[@]}" --set config.returnsExceptionsConsumerGroup=
 expect_refusal "an empty carton-discrepancy group" "config.cartonDiscrepancyConsumerGroup" "${base[@]}" --set config.cartonDiscrepancyConsumerGroup=
 expect_refusal "an empty yard-management group" "config.yardManagementExceptionsConsumerGroup" "${base[@]}" --set config.yardManagementExceptionsConsumerGroup=

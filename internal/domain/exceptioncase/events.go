@@ -95,12 +95,14 @@ type ExceptionResolved struct {
 func (ExceptionResolved) EventName() string { return "ExceptionResolved" }
 
 // ExceptionAutoResolved is raised by AutoResolve: a declarative policy rule
-// closed the case on a correlated fact.
+// closed the case on a correlated fact. Note is "" when the closing fact
+// recorded no outcome (ADR 0012).
 type ExceptionAutoResolved struct {
 	Header
 	RuleID            string
 	CorrelatedType    string
 	CorrelatedEventID string
+	Note              string
 }
 
 // EventName returns "ExceptionAutoResolved".

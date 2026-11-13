@@ -123,8 +123,11 @@ func (c *Case) Escalate(at time.Time) (bool, error) {
 // AutoResolve closes the case the way a declarative policy rule does
 // (ADR 0002): the rule's derived id and the correlated fact's full type and
 // id are recorded, the audit actor is the policy, and the case becomes
-// RESOLVED (terminal). Never agent-initiated.
-func (c *Case) AutoResolve(ruleID, correlatedType, correlatedEventID string, at time.Time) error {
+// RESOLVED (terminal). Never agent-initiated. The optional note (ADR 0012)
+// carries the closing fact's outcome — e.g. a held-stock disposition — onto
+// the resolution record; a missing or blank note records none, so the
+// existing callers are unchanged.
+func (c *Case) AutoResolve(ruleID, correlatedType, correlatedEventID string, at time.Time, note ...string) error {
 	if err := c.commandable(); err != nil {
 		return err
 	}
@@ -137,12 +140,17 @@ func (c *Case) AutoResolve(ruleID, correlatedType, correlatedEventID string, at 
 	if at.IsZero() {
 		return ErrNoTimestamp
 	}
+	resolutionNote := ""
+	if len(note) > 0 && !shared.IsBlank(note[0]) {
+		resolutionNote = note[0]
+	}
 	utc := at.UTC()
 	actor := shared.Actor{Kind: shared.ActorPolicy, Name: ruleID}
 	c.status = StatusResolved
 	c.resolution = resolution{
 		code:      "AUTO_RESOLVED",
 		rootCause: correlatedType,
+		note:      resolutionNote,
 		at:        utc,
 		actor:     actor,
 		auto:      &autoResolution{ruleID: ruleID, correlatedType: correlatedType, correlatedEventID: correlatedEventID},
@@ -154,6 +162,7 @@ func (c *Case) AutoResolve(ruleID, correlatedType, correlatedEventID string, at 
 		RuleID:            ruleID,
 		CorrelatedType:    correlatedType,
 		CorrelatedEventID: correlatedEventID,
+		Note:              resolutionNote,
 	})
 	return nil
 }

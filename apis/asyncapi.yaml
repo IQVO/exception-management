@@ -25,15 +25,18 @@ info:
     the same `id`). Kafka key = case id (source type for the policy event), so
     one case's history stays ordered on one partition.
 
-    **Consumed (ADR 0003, 0006, 0010, 0011).** Exception facts from ten sibling
-    contexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
+    **Consumed (ADR 0003, 0006, 0010, 0011, 0012).** Exception facts from ten
+    sibling contexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,
     `WeightDiscrepancyDetected`), wes-work-planning
     (`BacklogThresholdBreached`), network-fulfillment
     (`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),
     order-management (`OrderRepromised`, correlation for auto-resolve only),
     returns-processing (`UnexpectedReturnReceived`), inbound-receiving
     (`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006),
-    inventory-storage (`DiscrepancyDetected`, `ItemUnlocated`),
+    inventory-storage (`DiscrepancyDetected`, `ItemUnlocated`, and — under a
+    second consumer group, ADR 0012 — `StockHeld`, `StockReleased`,
+    `StockDispositioned`: one case per held unit, auto-resolved when the
+    hold ends),
     yard-management (`VisitRejected`, `SealExceptionRaised`,
     `TrailerDwellExceeded`, `YardCheckClosed` — one case per
     discrepancy, ADR 0010), dock-scheduling
@@ -322,25 +325,36 @@ channels:
 
   warehouse.inventory.events:
     description: |
-      inventory-storage's integration topic. This service consumes
-      `DiscrepancyDetected` and `ItemUnlocated` under a stable consumer group
-      read from env `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`. Both types arrive
-      here only after the producer's promotion PR (they are analytics-only
-      today); the contracts below are pinned consumer-first. Every other type
-      is ignored.
+      inventory-storage's integration topic. This service reads it under TWO
+      stable consumer groups. `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` consumes
+      `DiscrepancyDetected` and `ItemUnlocated` (both arrive here only after
+      the producer's promotion PR; the contracts below are pinned
+      consumer-first). `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012)
+      consumes the held-stock facts `StockHeld`, `StockReleased` and
+      `StockDispositioned`: every held unit gets exactly one open case,
+      auto-resolved when the hold ends. Every other type on the topic is
+      ignored by both groups.
     publish:
       operationId: consumeInventoryEvents
-      summary: Consume count discrepancies and unlocated stock.
+      summary: Consume count discrepancies, unlocated stock and held-stock facts.
       description: |
         A short count (`DiscrepancyDetected`) and the stock it could not find
-        (`ItemUnlocated`) each open or touch their own case. The CloudEvents
-        `id` claim and the effect commit in one transaction.
+        (`ItemUnlocated`) each open or touch their own case. A `StockHeld`
+        fact opens ONE case per held unit id (a re-emitted hold touches it);
+        a closing disposition (`RELEASE`, `RETURN_TO_VENDOR`, `SCRAP`) or a
+        release auto-resolves it with the outcome in the resolution note,
+        while a `REWORK` disposition keeps the unit held and the case open
+        (the arrival is recorded as an occurrence). The CloudEvents `id`
+        claim and the effect commit in one transaction.
       tags:
         - name: consumed
       message:
         oneOf:
           - $ref: "#/components/messages/DiscrepancyDetected"
           - $ref: "#/components/messages/ItemUnlocated"
+          - $ref: "#/components/messages/StockHeld"
+          - $ref: "#/components/messages/StockReleased"
+          - $ref: "#/components/messages/StockDispositioned"
 
   warehouse.outbound-shipping.events:
     description: |
@@ -554,6 +568,8 @@ components:
         `correlated_event_id` are the full CloudEvents type and id of the
         correlated fact that satisfied the rule (for example an
         `OrderRepromised` for the same work unit within the window).
+        `note` (ADR 0012) is the closing fact's outcome when it carries one
+        (a held-stock disposition or release); null when it does not.
       contentType: application/cloudevents+json
       tags:
         - name: exceptioncase
@@ -576,7 +592,26 @@ components:
               rule_id: "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed->com.warehouse.wes.order-management.order.OrderRepromised"
               correlated_type: "com.warehouse.wes.order-management.order.OrderRepromised"
               correlated_event_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+              note: null
               at: "2026-10-21T09:20:00Z"
+        - name: heldStockDispositioned
+          summary: ADR 0012 — a RETURN_TO_VENDOR disposition closed the held-stock case.
+          payload:
+            specversion: "1.0"
+            id: "5c4b3a29-1e2f-4a89-b7c6-d5e4f3a2b1c0"
+            source: "/warehouse/exception-management"
+            type: "com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved"
+            subject: "case-2e3f4a5b-6c7d-4899-a0bc-def012345679"
+            time: "2026-11-12T10:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:exception-management:events:ExceptionAutoResolved:v1"
+            data:
+              case_id: "case-2e3f4a5b-6c7d-4899-a0bc-def012345679"
+              rule_id: "com.warehouse.wms.inventory-storage.stock.StockHeld->com.warehouse.wms.inventory-storage.stock.StockDispositioned"
+              correlated_type: "com.warehouse.wms.inventory-storage.stock.StockDispositioned"
+              correlated_event_id: "0b3a8d96-4c79-4e5a-9f60-2e410a5c3d78"
+              note: "disposition RETURN_TO_VENDOR"
+              at: "2026-11-12T10:30:00Z"
 
     ExceptionPolicyDeclared:
       x-no-consumer-reason: "policy declaration fact (append-only versions); no event consumer in v1"
@@ -1220,6 +1255,127 @@ components:
               bin_id: "A-12-3"
               quantity: 3
 
+    StockHeld:
+      name: StockHeld
+      title: StockHeld (consumed, inventory-storage)
+      summary: A unit of stock was booked HELD; no usable quantity until dispositioned.
+      description: |
+        Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012; the
+        producer's own contract is inventory-storage ADR 0052). `type` =
+        `com.warehouse.wms.inventory-storage.stock.StockHeld`, source
+        `/warehouse/inventory-storage`, dataschema
+        `urn:warehouse:inventory-storage:events:StockHeld:v1`. Subject =
+        Kafka key = the held unit id. ONE case opens per held unit id: the
+        payload (sku, quantity, hold reason, receipt/ASN/line source) is
+        frozen on it; a re-emitted hold touches the same case.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/StockHeldEvent"
+      examples:
+        - name: damagedLineHeld
+          summary: Four damaged units of SKU-9 booked as a held unit off receipt rcpt-77 line 2.
+          payload:
+            specversion: "1.0"
+            id: "8f1e6b94-2a57-4c38-9d47-0c2f8e3a1b56"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.stock.StockHeld"
+            subject: "hu-4471"
+            time: "2026-11-12T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:StockHeld:v1"
+            data:
+              held_unit_id: "hu-4471"
+              sku: "SKU-9"
+              quantity: 4
+              reason: "DAMAGED"
+              receipt_id: "rcpt-77"
+              asn_number: "ASN-88"
+              line_no: 2
+              held_at: "2026-11-12T09:00:00Z"
+
+    StockReleased:
+      name: StockReleased
+      title: StockReleased (consumed, inventory-storage)
+      summary: A held unit was released; the quantity re-enters stock as a fresh staged receipt.
+      description: |
+        Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012).
+        The producer raises it ONLY on a `RELEASE` disposition, in addition
+        to `StockDispositioned` (inventory-storage ADR 0052), so in practice
+        it arrives as the second fact of a pair whose first fact already
+        closed the case; handling it as a close in its own right covers
+        either arrival order. It auto-resolves the held unit's case with a
+        released note. `type` =
+        `com.warehouse.wms.inventory-storage.stock.StockReleased`, subject =
+        Kafka key = the held unit id.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/StockReleasedEvent"
+      examples:
+        - name: releasedBackToStock
+          summary: The held unit was released; the case auto-resolves.
+          payload:
+            specversion: "1.0"
+            id: "9a2f7c85-3b68-4d49-8e5f-1d309f4b2c67"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.stock.StockReleased"
+            subject: "hu-4471"
+            time: "2026-11-12T10:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:StockReleased:v1"
+            data:
+              held_unit_id: "hu-4471"
+              sku: "SKU-9"
+              quantity: 4
+              receipt_id: "rcpt-77"
+              asn_number: "ASN-88"
+              line_no: 2
+              released_at: "2026-11-12T10:00:00Z"
+
+    StockDispositioned:
+      name: StockDispositioned
+      title: StockDispositioned (consumed, inventory-storage)
+      summary: A disposition was decided for a held unit.
+      description: |
+        Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012).
+        Raised for all four dispositions (inventory-storage ADR 0052):
+        `RELEASE`, `RETURN_TO_VENDOR` and `SCRAP` end the hold, so the case
+        auto-resolves with the disposition in the resolution note; `REWORK`
+        KEEPS the unit held, so the case stays open and the arrival is
+        recorded as an occurrence. `type` =
+        `com.warehouse.wms.inventory-storage.stock.StockDispositioned`,
+        subject = Kafka key = the held unit id.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/StockDispositionedEvent"
+      examples:
+        - name: returnedToVendor
+          summary: The damaged units go back to the vendor; the case auto-resolves.
+          payload:
+            specversion: "1.0"
+            id: "0b3a8d96-4c79-4e5a-9f60-2e410a5c3d78"
+            source: "/warehouse/inventory-storage"
+            type: "com.warehouse.wms.inventory-storage.stock.StockDispositioned"
+            subject: "hu-4471"
+            time: "2026-11-12T10:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:inventory-storage:events:StockDispositioned:v1"
+            data:
+              held_unit_id: "hu-4471"
+              sku: "SKU-9"
+              quantity: 4
+              disposition: "RETURN_TO_VENDOR"
+              reason: "DAMAGED"
+              receipt_id: "rcpt-77"
+              asn_number: "ASN-88"
+              line_no: 2
+              decided_at: "2026-11-12T10:30:00Z"
+
 
     ExceptionOpenedAnalytics:
       name: ExceptionOpened
@@ -1545,6 +1701,7 @@ components:
                 rule_id: { type: string, description: The policy's auto-resolve rule that fired. }
                 correlated_type: { type: string, description: The full CloudEvents type of the correlated fact. }
                 correlated_event_id: { type: string, description: The CloudEvents id of the correlated fact. }
+                note: { type: string, nullable: true, description: The closing fact's outcome when it carries one (ADR 0012); null when it does not. }
                 at: { type: string, format: date-time }
 
     ExceptionPolicyDeclaredEvent:
@@ -1831,3 +1988,59 @@ components:
                 sku: { type: string }
                 bin_id: { type: string, description: The bin the stock was believed to be in. }
                 quantity: { type: integer, minimum: 1, description: Quantity that could not be accounted for. }
+
+    StockHeldEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [held_unit_id, sku, quantity, reason, receipt_id, asn_number, line_no, held_at]
+              properties:
+                held_unit_id: { type: string, description: The held unit id (the subject). }
+                sku: { type: string, description: The SKU held. }
+                quantity: { type: integer, minimum: 1, description: Eaches held. }
+                reason: { type: string, enum: [DAMAGED, QC_PENDING, SUSPECT, OTHER], description: Why it is held. }
+                receipt_id: { type: string, description: The inbound receipt the quantity came from. }
+                asn_number: { type: string, description: The ASN of the receipt. }
+                line_no: { type: integer, minimum: 1, description: The receipt line. }
+                owner_ref: { type: string, description: Owner of the stock. Omitted for fleet-owned stock. }
+                sscc: { type: string, description: The carton SSCC of the line. Omitted when it had none. }
+                held_at: { type: string, format: date-time, description: When the unit was held. }
+
+    StockReleasedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [held_unit_id, sku, quantity, receipt_id, asn_number, line_no, released_at]
+              properties:
+                held_unit_id: { type: string, description: The held unit id (the subject). }
+                sku: { type: string, description: The SKU held. }
+                quantity: { type: integer, minimum: 1, description: Eaches released. }
+                receipt_id: { type: string, description: The inbound receipt the quantity came from. }
+                asn_number: { type: string, description: The ASN of the receipt. }
+                line_no: { type: integer, minimum: 1, description: The receipt line. }
+                released_at: { type: string, format: date-time, description: When the unit was released. }
+
+    StockDispositionedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [held_unit_id, sku, quantity, disposition, reason, receipt_id, asn_number, line_no, decided_at]
+              properties:
+                held_unit_id: { type: string, description: The held unit id (the subject). }
+                sku: { type: string, description: The SKU held. }
+                quantity: { type: integer, minimum: 1, description: Eaches dispositioned. }
+                disposition: { type: string, enum: [RELEASE, RETURN_TO_VENDOR, SCRAP, REWORK], description: The decision. }
+                reason: { type: string, enum: [DAMAGED, QC_PENDING, SUSPECT, OTHER], description: The hold reason after the decision. }
+                receipt_id: { type: string, description: The inbound receipt the quantity came from. }
+                asn_number: { type: string, description: The ASN of the receipt. }
+                line_no: { type: integer, minimum: 1, description: The receipt line. }
+                decided_at: { type: string, format: date-time, description: When it was decided. }

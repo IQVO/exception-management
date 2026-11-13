@@ -25,3 +25,4 @@ section.
 | [0009](/docs/adr/0009-agent-authority-levels-and-complete-mcp-surface) | Agent authority levels and complete MCP surface | Accepted (2026-11-02) |
 | [0010](/docs/adr/0010-yard-exceptions-consumers-and-routing) | yard exceptions consumers and routing | Accepted (2026-11-05) |
 | [0011](/docs/adr/0011-package-missed-load-consumer) | PackageMissedLoad consumer | Accepted (2026-11-06) |
+| [0012](/docs/adr/0012-held-stock-exception-cases) | held-stock exception cases — one case per held unit, auto-resolved on disposition | Accepted (2026-11-12) |

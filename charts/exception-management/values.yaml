@@ -112,7 +112,7 @@ config:
   # SHUTDOWN_DRAIN_DELAY: wait after /readyz flips before closing the
   # listener. Empty = not rendered; the binary defaults to 5s.
   shutdownDrainDelay: ""
-  # The STABLE consumer group ids of the ten consumers (MANDATORY: the
+  # The STABLE consumer group ids of the eleven consumers (MANDATORY: the
   # binary exits at boot without them, and the chart refuses to render with
   # an empty one). They are fixed names, not derived from the pod, so a
   # rescheduled pod resumes from its committed offsets. Do not rename them
@@ -123,6 +123,7 @@ config:
   networkFulfillmentExceptionsConsumerGroup: "exception-management-network-fulfillment"  # NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP (warehouse.network-fulfillment.events)
   orderCorrelationConsumerGroup: "exception-management-order-correlation"       # ORDER_CORRELATION_CONSUMER_GROUP (warehouse.order-management.events, auto-resolve correlation)
   inventoryExceptionsConsumerGroup: "exception-management-inventory"            # INVENTORY_EXCEPTIONS_CONSUMER_GROUP (warehouse.inventory.events)
+  heldStockExceptionsConsumerGroup: "exception-management-held-stock"           # HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP (warehouse.inventory.events, second group — ADR 0012)
   returnsExceptionsConsumerGroup: "exception-management-returns"                # RETURNS_EXCEPTIONS_CONSUMER_GROUP (warehouse.returns-processing.events)
   cartonDiscrepancyConsumerGroup: "exception-management-carton-discrepancy"      # CARTON_DISCREPANCY_CONSUMER_GROUP (warehouse.inbound-receiving.events)
   yardManagementExceptionsConsumerGroup: "exception-management-yard-management"   # YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP (warehouse.yard-management.events)
