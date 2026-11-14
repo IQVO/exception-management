@@ -13,7 +13,7 @@ sidebar_position: 4
 | --- | --- | --- |
 | exits at boot: `DATABASE_URL is required` | the only runtime is real Postgres | set `DATABASE_URL` (chart: `database.url` or `database.existingSecret`) |
 | exits at boot: `KAFKA_BROKERS is required` | same rule for Kafka | set `KAFKA_BROKERS` (chart: `kafka.brokers`) |
-| exits at boot naming a `*_CONSUMER_GROUP` variable | one of the ten pinned group ids is missing (fail-closed by design) | set all ten — see [Configuration](/docs/operations/configuration); never rename one in a running environment |
+| exits at boot naming a `*_CONSUMER_GROUP` variable | one of the eleven pinned group ids is missing (fail-closed by design) | set all eleven — see [Configuration](/docs/operations/configuration); never rename one in a running environment |
 | CrashLoop with `run migrations` error | migrations could not run; behind PgBouncer the session-scoped advisory lock cannot pass | set `MIGRATIONS_DATABASE_URL` to a direct DSN |
 | helm render fails naming a value | the chart refuses a render without a database source / brokers / with a `*_MODE` env | supply the named value; there are no modes to enable |
 

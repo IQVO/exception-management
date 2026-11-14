@@ -19,6 +19,10 @@ flowchart LR
     NF["network-fulfillment\nAcknowledgementDeadlineAtRisk ·\nOrphanedHoldCancelled"]
     IS["inventory-storage\nDiscrepancyDetected ·\nItemUnlocated ·\nStockHeld/StockReleased/\nStockDispositioned (ADR 0012)"]
     RP["returns-processing\nUnexpectedReturnReceived"]
+    IR["inbound-receiving\nCartonDiscrepancyRaised"]
+    YM["yard-management\nVisitRejected · SealExceptionRaised ·\nTrailerDwellExceeded · YardCheckClosed"]
+    DS["dock-scheduling\nDockAppointmentNoShow"]
+    OS["outbound-shipping\nPackageMissedLoad"]
   end
   OM["order-management\nOrderRepromised (correlation only)"]
   EM["exception-management"]
@@ -30,6 +34,10 @@ flowchart LR
   NF --> EM
   IS --> EM
   RP --> EM
+  IR --> EM
+  YM --> EM
+  DS --> EM
+  OS --> EM
   OM -.->|auto-resolve window| EM
   EM -->|"warehouse.exception-management.events"| CONS["future consumers (none evidenced)"]
   EM -->|"warehouse.exception-management.analytics"| PRJ["cmd/exceptions-projector\n(analytical DB writer)"]

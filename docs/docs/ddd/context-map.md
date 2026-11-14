@@ -15,9 +15,11 @@ flowchart TB
     NF["network-fulfillment<br/>AcknowledgementDeadlineAtRisk,<br/>OrphanedHoldCancelled"]
     OM["order-management<br/>OrderRepromised (correlation only)"]
     RP["returns-processing<br/>UnexpectedReturnReceived"]
-    IS["inventory-storage<br/>DiscrepancyDetected, ItemUnlocated"]
+    IS["inventory-storage<br/>DiscrepancyDetected, ItemUnlocated,<br/>StockHeld, StockReleased,<br/>StockDispositioned"]
     YM["yard-management<br/>VisitRejected, SealExceptionRaised,<br/>TrailerDwellExceeded, YardCheckClosed"]
     DS["dock-scheduling<br/>DockAppointmentNoShow"]
+    IR["inbound-receiving<br/>CartonDiscrepancyRaised"]
+    OS["outbound-shipping<br/>PackageMissedLoad"]
     EM["exception-management"]
     AG(["warehouse-ops-agent<br/>(read-only MCP)"])
     CON(["console + operators<br/>(REST reads)"])
@@ -30,6 +32,8 @@ flowchart TB
     IS --> EM
     YM --> EM
     DS --> EM
+    IR --> EM
+    OS --> EM
     EM --> AG
     EM --> CON
 

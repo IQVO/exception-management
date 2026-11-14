@@ -15,7 +15,7 @@ flows down; one lane per aggregate.
 
 ```mermaid
 flowchart TB
-    subgraph SOURCES["Facts consumed (pink) - one per pinned consumer group"]
+    subgraph SOURCES["Facts consumed (pink) - 20 types, eleven pinned consumer groups"]
         direction LR
         F1["TaskCPTMissed<br/>(re-fires each sweep)"]
         F2["PackageDiverted"]
@@ -26,12 +26,22 @@ flowchart TB
         F7["UnexpectedReturnReceived"]
         F8["DiscrepancyDetected"]
         F9["ItemUnlocated"]
+        F10["CartonDiscrepancyRaised<br/>(routed by kind)"]
+        F11["StockHeld<br/>(one case per held unit)"]
+        F12["VisitRejected"]
+        F13["SealExceptionRaised"]
+        F14["TrailerDwellExceeded"]
+        F15["YardCheckClosed<br/>(one case per discrepancy)"]
+        F16["DockAppointmentNoShow"]
+        F17["PackageMissedLoad"]
+        H1["StockReleased /<br/>StockDispositioned<br/>(close the held unit's case)"]
         R1["OrderRepromised<br/>(correlation only)"]
     end
 
     P1["Policy: one open case per<br/>dedup key - repeat touches"]
     P2["Policy: SLA sweeper<br/>(bounded ticker)"]
     P3["Policy: auto-resolve rule<br/>(data, from ExceptionPolicy)"]
+    P4["Policy: held-stock close<br/>(definitional, no rule)"]
 
     subgraph CASELANE["ExceptionCase lane"]
         E1["ExceptionOpened"]
@@ -60,9 +70,19 @@ flowchart TB
     F7 --> P1
     F8 --> P1
     F9 --> P1
+    F10 --> P1
+    F11 --> P1
+    F12 --> P1
+    F13 --> P1
+    F14 --> P1
+    F15 --> P1
+    F16 --> P1
+    F17 --> P1
     P1 --> E1
     R1 --> P3
     P3 --> E6
+    H1 --> P4
+    P4 --> E6
     T1 --> E2
     T2 --> E3
     T3 --> E5
@@ -81,7 +101,7 @@ flowchart TB
 | 3 | `ExceptionTriaged` / `ExceptionAssigned` | Operator commands (severity/queue; owner), each with the operator as actor. |
 | 4 | `ExceptionEscalated` | Policy: the SLA sweeper finds `now` past `slaDueAt` on an unflagged open case — once per case. |
 | 5a | `ExceptionResolved` | Operator records resolution code + root cause (terminal). |
-| 5b | `ExceptionAutoResolved` | Policy: the declarative rule fired on a correlated fact (`OrderRepromised` within the window of the same work unit's order). |
+| 5b | `ExceptionAutoResolved` | Policy: the declarative rule fired on a correlated fact (`OrderRepromised` within the window of the same work unit's order), or the held-stock close: a `StockReleased`, or a `StockDispositioned` that ends the hold (`RELEASE`, `RETURN_TO_VENDOR`, `SCRAP`), resolves the case of that held unit (ADR 0012). A `REWORK` disposition only touches it. |
 
 ## Hotspots the model answers
 

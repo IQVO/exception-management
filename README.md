@@ -5,8 +5,9 @@
 The **Exception Management** bounded context of the `warehouse-systems`
 fleet — WES-tier **Supporting Subdomain**, the warehouse's "Problem Solve".
 It turns the anomaly facts other contexts already publish (missed CPTs,
-backlog breaches, at-risk acknowledgements, count discrepancies, diverted
-packages, unexpected returns) into owned cases with triage, assignment, an
+backlog breaches, at-risk acknowledgements, count and carton discrepancies,
+diverted or missed-load packages, unexpected returns, held stock, yard seal,
+dwell and yard-check exceptions, dock no-shows) into owned cases with triage, assignment, an
 SLA clock, resolution and root cause.
 
 It owns the `ExceptionCase` aggregate and the versioned `ExceptionPolicy`
@@ -359,7 +360,7 @@ helm install exception-management ./charts/exception-management \
 ```
 
 The chart refuses to render without `database.url` (or
-`database.existingSecret`), `kafka.brokers` and the ten pinned consumer
+`database.existingSecret`), `kafka.brokers` and the eleven pinned consumer
 groups (`config.*ConsumerGroup`). Optional components, all off by default:
 `mcp`, `analytics` (projector + reports), `frontend` and `a2a`. Chart
 invariants are asserted by `charts/exception-management/tests/`
