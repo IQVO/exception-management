@@ -75,7 +75,7 @@ bodies are immutable, this table is the current truth.
 | warehouse-ops-agent | read-only MCP (`cmd/mcp`, `:8090`) | Open Host Service | Built |
 | Console / operators | REST reads (`GET /exceptions*`, `GET /exception-policies`) | Open Host Service | Built |
 | Any fleet consumer | `warehouse.exception-management.events` | Published Language (CloudEvents catalogue, ADR 0004) | Built; no known external consumer yet |
-| This service's own projector | `warehouse.exception-management.analytics` | Internal | Built (`cmd/exceptions-projector`, ADR 0006) |
+| This service's own projector | `warehouse.exception-management.analytics` | Internal | Built (`cmd/exceptions-projector`, ADR 0013) |
 
 ## Planned, not built
 

@@ -174,7 +174,7 @@ func TestEncode_GoldenJSONPerType(t *testing.T) {
 				t.Fatalf("Encode: %v", err)
 			}
 			if len(msgs) != 2 {
-				t.Fatalf("%d messages, want 2 (the integration twin and the analytics twin, ADR 0006)", len(msgs))
+				t.Fatalf("%d messages, want 2 (the integration twin and the analytics twin, ADR 0013)", len(msgs))
 			}
 			assertMessage(t, c, cloudevents.StreamEvents, msgs[0])
 			assertMessage(t, c, cloudevents.StreamAnalytics, msgs[1])
@@ -221,7 +221,7 @@ func TestEncode_IDStableAcrossCalls(t *testing.T) {
 }
 
 // The analytics twin is byte-identical to the integration message except
-// for the dataschema stream segment: nothing else may differ (ADR 0006).
+// for the dataschema stream segment: nothing else may differ (ADR 0013).
 func TestEncode_AnalyticsTwinDiffersOnlyInDataSchema(t *testing.T) {
 	for _, c := range goldenCases(t) {
 		msgs, err := kafka.Encode(c.fact)

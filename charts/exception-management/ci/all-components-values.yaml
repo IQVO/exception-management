@@ -68,7 +68,7 @@ kongPlugins:
 frontend:
   enabled: true
 
-# The analytics components (ADR 0006) on too: api + mcp + frontend +
+# The analytics components (ADR 0013) on too: api + mcp + frontend +
 # projector + reports, so a template that renders alone but collides with
 # another is caught by `helm lint`.
 analytics:

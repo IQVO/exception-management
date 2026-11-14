@@ -1,4 +1,4 @@
-// Package analytics holds the ANALYTICAL database's schema (ADR 0006): the
+// Package analytics holds the ANALYTICAL database's schema (ADR 0013): the
 // golang-migrate files under migrations/, embedded so cmd/exceptions-projector
 // applies them without a migrations directory in the image (the same approach
 // as the OLTP migrations in the top-level migrations package). The analytical

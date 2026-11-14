@@ -1,5 +1,5 @@
 // Command exceptions-projector is the WRITER of the exception-management
-// analytics read side (ADR 0006). It consumes the analytics topic
+// analytics read side (ADR 0013). It consumes the analytics topic
 // (warehouse.exception-management.analytics) under a fixed, env-supplied
 // consumer group, projects each event into the ANALYTICAL database (a
 // separate database with its own embedded migrations) and serves only

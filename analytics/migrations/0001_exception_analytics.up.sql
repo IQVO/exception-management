@@ -1,4 +1,4 @@
--- exception-management analytics read model (ADR 0006).
+-- exception-management analytics read model (ADR 0013).
 --
 -- This is the ANALYTICAL database, separate from the OLTP database. It is
 -- written only by cmd/exceptions-projector and read (read-only) by

@@ -60,7 +60,7 @@ func mustActor(t *testing.T, name string) shared.Actor {
 	return a
 }
 
-// The full analytics read side on real infrastructure (ADR 0006's proof):
+// The full analytics read side on real infrastructure (ADR 0013's proof):
 // REAL domain facts are enqueued through the REAL transactional outbox
 // (postgres.OutboxPublisher) on the OLTP database, the REAL relay drains them
 // to Kafka (which now writes every fact to BOTH topics), the projector

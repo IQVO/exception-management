@@ -24,7 +24,7 @@ const (
 )
 
 // analyticsKinds maps the FULL CloudEvents type of the seven published events
-// to their report.Kind (ADR 0006's catalogue). Every other type on the topic
+// to their report.Kind (ADR 0013's catalogue). Every other type on the topic
 // is acknowledged and ignored.
 var analyticsKinds = map[string]report.Kind{
 	cloudevents.Type(analyticsEntityCase, string(report.KindExceptionOpened)):           report.KindExceptionOpened,
@@ -66,7 +66,7 @@ type analyticsData struct {
 	AutoResolve       *analyticsAutoResolve `json:"auto_resolve"`
 }
 
-// NewAnalyticsConsumer builds the projector's consumer (ADR 0006): it reads
+// NewAnalyticsConsumer builds the projector's consumer (ADR 0013): it reads
 // the analytics topic under a FIXED, env-supplied consumer group and folds
 // each event into the analytical model through report.Projection.
 //

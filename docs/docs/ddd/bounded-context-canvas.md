@@ -98,7 +98,7 @@ ops-agent work cases instead of raw events.
 | `warehouse.exception-management.events.dlq` | poison outbox rows, raw | ADR 0005 |
 | REST reads | `GET /exceptions`, `GET /exceptions/{caseId}`, `GET /exception-policies` | |
 | MCP (`cmd/mcp`, `:8090`) | `list_open_exceptions`, `get_exception`, `get_exception_policies`, `get_sla_report` | read-only for warehouse-ops-agent |
-| Built | `warehouse.exception-management.analytics` mirror, read by `cmd/exceptions-projector` into the analytical database and served by `cmd/exceptions-reports` | ADR 0004, ADR 0006 |
+| Built | `warehouse.exception-management.analytics` mirror, read by `cmd/exceptions-projector` into the analytical database and served by `cmd/exceptions-reports` | ADR 0004, ADR 0013 |
 
 ## Ubiquitous language
 
@@ -152,7 +152,7 @@ correlated fact, work unit ref, policy version — each defined on
 
 - When does the Supporting → Core flip happen? (ADR 0001's condition:
   auto-resolution policies and agent recommendations at scale.)
-- The analytics mirror (ADR 0004) and its projector are built (ADR 0006); no consumer of the mirror
+- The analytics mirror (ADR 0004) and its projector are built (ADR 0013); no consumer of the mirror
   other than `cmd/exceptions-projector` is evidenced.
 - v2 candidates deliberately parked in ADR 0001: manual case creation,
   associate paging, labor-cost correlation.

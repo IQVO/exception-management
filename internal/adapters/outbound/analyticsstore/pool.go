@@ -1,5 +1,5 @@
 // Package analyticsstore holds the Postgres adapters of the analytics read
-// side (ADR 0006) over the SEPARATE analytical database: Projection (the
+// side (ADR 0013) over the SEPARATE analytical database: Projection (the
 // writer used by cmd/exceptions-projector), Reader (the read-only report
 // queries used by cmd/exceptions-reports), and Memory, an in-memory twin of
 // both for tests. The same contract test runs against Memory and Postgres.

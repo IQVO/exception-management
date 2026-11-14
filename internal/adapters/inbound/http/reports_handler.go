@@ -11,7 +11,7 @@ import (
 )
 
 // ReportsServer is the inbound HTTP adapter of cmd/exceptions-reports: the
-// read-only analytics reports of ADR 0006. It depends only on the
+// read-only analytics reports of ADR 0013. It depends only on the
 // report.Reader port over the analytical database; it never touches the OLTP
 // use cases, and it writes nothing.
 type ReportsServer struct {

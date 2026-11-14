@@ -24,7 +24,7 @@ type memoryPolicy struct {
 // (earliest milestone wins, latest severity/queue/assignee wins, first
 // non-NULL descriptive value) and the same report definitions, computed with
 // the pure helpers of internal/analytics/report. One contract test runs
-// against Memory and Postgres so the two can never drift (ADR 0006).
+// against Memory and Postgres so the two can never drift (ADR 0013).
 type Memory struct {
 	mu        sync.Mutex
 	processed map[string]time.Time

@@ -48,7 +48,7 @@ func openedRow() outbox.Row {
 // A known row is encoded and written as the TWO twins: the integration one
 // on the events topic and the analytics one on the analytics topic, both
 // with the aggregate id as the key and exactly the content-type header
-// (ADR 0006).
+// (ADR 0013).
 func TestRelaySinkHandleWritesEncodedEvent(t *testing.T) {
 	w := &fakeWriter{}
 	sink := kafka.NewRelaySinkWithWriter(w)

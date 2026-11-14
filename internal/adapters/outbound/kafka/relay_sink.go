@@ -26,7 +26,7 @@ type Writer interface {
 //
 // EventsTopic and DeadLetterTopic default to TopicEvents and DeadLetterTopic;
 // AnalyticsTopic defaults to TopicAnalytics (the twin of every encoded fact,
-// ADR 0006). The fields exist so the integration proof can point the same
+// ADR 0013). The fields exist so the integration proof can point the same
 // code at isolated per-test topics.
 type RelaySink struct {
 	writer Writer

@@ -66,7 +66,7 @@ exist, the operational truth is the SLA report read (`get_sla_report` over MCP,
 
 ## Analytics projector and reports
 
-Built (ADR 0006), separate from the OLTP service and its database:
+Built (ADR 0013), separate from the OLTP service and its database:
 
 - `cmd/exceptions-projector` consumes the topic `warehouse.exception-management.analytics` under the
   required `ANALYTICS_CONSUMER_GROUP`. It reads seven types (`ExceptionOpened`, `ExceptionTriaged`,
