@@ -38,6 +38,10 @@
 //	SLA_SWEEP_INTERVAL        SLA sweep ticker interval (Go duration or seconds, default 1m)
 //	SHUTDOWN_DRAIN_DELAY      wait after flipping /readyz before closing (default 5s, 0 = off)
 //	LOG_LEVEL                 debug | info | warn | error (default info)
+//	OTEL_EXPORTER_OTLP_ENDPOINT  Collector OTLP/gRPC endpoint (default localhost:4317; export never blocks)
+//	OTEL_SERVICE_NAME         service.name of spans, metrics and logs (default exception-management)
+//	SERVICE_VERSION           service.version (default dev)
+//	ENVIRONMENT               deployment.environment.name (default local)
 //
 // /readyz is the drain gate AND a Postgres ping AND a Kafka metadata check
 // (a broker answers a metadata request that names NO topic: reachability
@@ -77,6 +81,10 @@ const relayDrainTimeout = 10 * time.Second
 
 func main() {
 	logger := newLogger(os.Getenv("LOG_LEVEL"))
+	// The default logger carries the same handler, so the OpenTelemetry SDK's
+	// own diagnostics (bridged by telemetry.Setup) and the stdlib's log
+	// output are JSON, level-filtered and trace-correlated like every line.
+	slog.SetDefault(logger)
 	if err := run(context.Background(), logger); err != nil {
 		logger.Error("service stopped", "error", err)
 		os.Exit(1)
@@ -97,8 +105,17 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// closeAdapters (pool.Close) is deferred FIRST so it runs LAST, after
-	// the HTTP drain and the relay have stopped.
+	// Telemetry comes up before anything that binds the global providers
+	// (the router's request-duration histogram, the case counter) and is
+	// flushed last, after the HTTP drain and the relay have stopped.
+	telemetryCfg, flushTelemetry, err := bootTelemetry(logger)
+	if err != nil {
+		return fmt.Errorf("start telemetry: %w", err)
+	}
+	defer flushTelemetry()
+
+	// pool.Close is deferred right after the telemetry flush, so it runs
+	// first of the two, after the HTTP drain and the relay have stopped.
 	pool, err := postgres.NewPool(ctx, cfg.databaseURL)
 	if err != nil {
 		return fmt.Errorf("open postgres: %w", err)
@@ -114,7 +131,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		inboundhttp.Dependency{Name: "postgres", Check: pool.Ping},
 		inboundhttp.Dependency{Name: "kafka", Check: outboundkafka.NewBrokerCheck(cfg.brokers).Check},
 	)
-	handler := inboundhttp.NewRouter(buildServer(pool, uow, clock, readiness))
+	server := buildServer(pool, uow, clock, readiness)
+	server.Logger, server.ServiceName = logger, telemetryCfg.serviceName
+	handler := inboundhttp.NewRouter(server)
 	httpServer := &http.Server{
 		Addr: cfg.httpAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second,
 	}

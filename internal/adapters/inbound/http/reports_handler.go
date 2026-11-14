@@ -6,7 +6,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/riandyrn/otelchi"
+	otelchimetric "github.com/riandyrn/otelchi/metric"
 
+	"github.com/claudioed/exception-management/internal/adapters/inbound/requestlog"
 	"github.com/claudioed/exception-management/internal/analytics/report"
 )
 
@@ -19,6 +23,12 @@ type ReportsServer struct {
 	// Now is the clock the default range ends at and the freshness lag is
 	// measured against (time.Now when nil).
 	Now func() time.Time
+	// Logger and ServiceName are the router's observability wiring, as on
+	// Server: the access-log logger (slog.Default when nil) and the name
+	// labelling the span and request-duration histogram
+	// (DefaultReportsServiceName when empty).
+	Logger      *slog.Logger
+	ServiceName string
 }
 
 // The wire shapes (snake_case like the other fleet reports); the report
@@ -80,9 +90,15 @@ var (
 // NewReportsRouter builds the router of cmd/exceptions-reports: /healthz, GET
 // /reports/root-cause-frequency, GET /reports/mean-time-to-resolve, GET
 // /reports/sla-breach-rate and GET /reports/freshness. No auth middleware
-// (fleet rule), no CORS: the service is cluster-internal.
+// (fleet rule), no CORS: the service is cluster-internal. The middleware
+// order is the fleet observability standard, identical to NewRouter's.
 func NewReportsRouter(s *ReportsServer) http.Handler {
 	r := chi.NewRouter()
+	name := serviceNameOr(s.ServiceName, DefaultReportsServiceName)
+	r.Use(middleware.RequestID)
+	r.Use(otelchi.Middleware(name, otelchi.WithChiRoutes(r)))
+	r.Use(otelchimetric.NewServerRequestDuration(otelchimetric.NewBaseConfig(name)))
+	r.Use(requestlog.RequestLogger(s.Logger))
 	r.Use(recoverPanic)
 	r.Get("/healthz", handleHealthz)
 	r.Get("/reports/root-cause-frequency", s.handleRootCauseFrequency)

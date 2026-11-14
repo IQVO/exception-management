@@ -20,12 +20,17 @@
 //	ANALYTICS_CONSUMER_GROUP  REQUIRED. The projector's fixed consumer group
 //	ADMIN_ADDR                /healthz and /readyz listen address (default :8091)
 //	LOG_LEVEL                 debug | info | warn (or warning) | error (default info)
+//	OTEL_EXPORTER_OTLP_ENDPOINT  Collector OTLP/gRPC endpoint (default localhost:4317; export never blocks)
+//	OTEL_SERVICE_NAME         service.name of spans, metrics and logs (default exception-management-projector)
+//	SERVICE_VERSION           service.version (default dev)
+//	ENVIRONMENT               deployment.environment.name (default local)
 package main
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -40,6 +45,7 @@ import (
 	inboundkafka "github.com/claudioed/exception-management/internal/adapters/inbound/kafka"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/analyticsstore"
 	outboundkafka "github.com/claudioed/exception-management/internal/adapters/outbound/kafka"
+	"github.com/claudioed/exception-management/internal/adapters/outbound/telemetry"
 )
 
 // shutdownTimeout bounds the admin server drain and the wait for the consumer
@@ -111,6 +117,13 @@ func run() error {
 	}
 	logger := newLogger(cfg.logLevel)
 	slog.SetDefault(logger)
+
+	telemetryCfg := loadTelemetryEnv(os.Getenv)
+	flushTelemetry, err := startTelemetry(logger, telemetryCfg)
+	if err != nil {
+		return fmt.Errorf("start telemetry: %w", err)
+	}
+	defer flushTelemetry() // runs last: after the consumer loop and the pool are done
 
 	pool, err := openAnalyticsPool(context.Background(), cfg.analyticsURL)
 	if err != nil {
@@ -227,7 +240,11 @@ func openAnalyticsPool(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func newLogger(level string) *slog.Logger {
+func newLogger(level string) *slog.Logger { return newLoggerTo(os.Stdout, level) }
+
+// newLoggerTo builds the JSON logger writing to w; the handler is wrapped so a
+// record written with a span-carrying context also carries trace_id and span_id.
+func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var lvl slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -239,5 +256,5 @@ func newLogger(level string) *slog.Logger {
 	default:
 		lvl = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
+	return slog.New(telemetry.WithTraceContext(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: lvl})))
 }

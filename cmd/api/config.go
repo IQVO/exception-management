@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	outboxrelay "github.com/claudioed/exception-management/internal/adapters/outbound/outbox"
+	"github.com/claudioed/exception-management/internal/adapters/outbound/telemetry"
 )
 
 // The service's boot configuration, from the environment. Everything is
@@ -23,9 +25,14 @@ func getenv(key, fallback string) string {
 	return fallback
 }
 
-// newLogger builds the JSON logger; LOG_LEVEL debug|info|warn|warning|error
-// (case-insensitive; "warning" is accepted like "warn" fleet-wide).
-func newLogger(level string) *slog.Logger {
+// newLogger builds the JSON logger on stdout; LOG_LEVEL debug|info|warn|warning|error
+// (case-insensitive; "warning" is accepted like "warn" fleet-wide). See newLoggerTo.
+func newLogger(level string) *slog.Logger { return newLoggerTo(os.Stdout, level) }
+
+// newLoggerTo builds the JSON logger writing to w. The handler is wrapped so a
+// record written with a span-carrying context (the *Context slog variants)
+// also carries trace_id and span_id.
+func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var lvl slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -37,7 +44,7 @@ func newLogger(level string) *slog.Logger {
 	default:
 		lvl = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
+	return slog.New(telemetry.WithTraceContext(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: lvl})))
 }
 
 // brokersFromEnv reads KAFKA_BROKERS (comma separated); empty when unset.

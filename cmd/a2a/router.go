@@ -1,11 +1,17 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/riandyrn/otelchi"
+	otelchimetric "github.com/riandyrn/otelchi/metric"
+
+	"github.com/claudioed/exception-management/internal/adapters/inbound/requestlog"
 )
 
 // newRouter wraps the A2A handler in a small chi router so the binary is
@@ -20,9 +26,20 @@ import (
 //     "/a2a" (the fleet's <CTX>_A2A_ENDPOINT convention, mirroring cmd/mcp's
 //     dual "/mcp" mount).
 //
+// The middleware order is the fleet observability standard, identical to the
+// REST router: RequestID, otelchi (server span named after the route pattern),
+// the request-duration histogram, RequestLogger, Recoverer. telemetry.Setup
+// must have run before this call (otelchimetric binds the global MeterProvider
+// at construction).
+//
 // No auth middleware is ever added here (TestNoAuthMiddlewareReintroduced).
-func newRouter(a2aHandler http.Handler, card *a2a.AgentCard) http.Handler {
+func newRouter(a2aHandler http.Handler, card *a2a.AgentCard, logger *slog.Logger, serviceName string) http.Handler {
 	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(otelchi.Middleware(serviceName, otelchi.WithChiRoutes(r)))
+	r.Use(otelchimetric.NewServerRequestDuration(otelchimetric.NewBaseConfig(serviceName)))
+	r.Use(requestlog.RequestLogger(logger))
+	r.Use(middleware.Recoverer)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
