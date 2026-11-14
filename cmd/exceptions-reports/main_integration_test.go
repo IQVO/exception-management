@@ -154,6 +154,12 @@ func TestReportsServeTheSeededProjectionAndStopCleanly(t *testing.T) {
 	assertSLABreachRate(t, base, from, to)
 	assertFreshness(t, base)
 
+	// http.Server.Shutdown waits for every connection to go idle, and it
+	// counts a connection that was opened but never sent a request (the
+	// transport's spare dial) as active for up to 5 s. Close the client's
+	// connections first so the drain below takes milliseconds, not seconds.
+	http.DefaultClient.CloseIdleConnections()
+
 	// run() takes no context; SIGTERM is the binary's stop path. A retried
 	// signal makes the drain deterministic even if the first one lands
 	// before run() installs its own handler.
