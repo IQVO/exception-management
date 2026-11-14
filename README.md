@@ -243,8 +243,8 @@ go run ./cmd/api              # migrations run automatically at startup; listens
 Card), `MIGRATIONS_DATABASE_URL`, `LOG_LEVEL`.
 `cmd/exceptions-projector`: `ANALYTICS_DATABASE_URL` (**required**),
 `KAFKA_BROKERS` (**required**), `ANALYTICS_CONSUMER_GROUP` (**required**),
-`ADMIN_ADDR` (`:8091`), `ANALYTICS_MIGRATIONS_PATH`
-(`analytics/migrations`), `LOG_LEVEL`.
+`ADMIN_ADDR` (`:8091`), `LOG_LEVEL` (the analytical migrations are embedded
+and run at boot).
 `cmd/exceptions-reports`: `ANALYTICS_DATABASE_URL` (**required**),
 `HTTP_ADDR` (`:8092`), `LOG_LEVEL`.
 
@@ -282,12 +282,17 @@ What exists today, and what deliberately does not (see the
   failures, consumer skips (an invalid CloudEvent, or a fact for an
   undeclared source type — that WARN is the signal of a missing policy, not
   an incident), relay DLQ writes and sweep escalations.
-- **Metrics** — `GET /metrics` (Prometheus text exposition) currently
-  carries the process presence gauge `exception_management_up`. The full
-  registry (case counters by status/queue, escalation counts, outbox depth,
-  consumer lag) is a fleet-wide instrumentation step, **roadmap, not
-  built**: no prometheus client is in the module yet.
-- **Traces — no tracing SDK is wired.**
+- **Metrics** — `GET /metrics` (Prometheus text exposition) is a hand-written
+  handler that serves exactly one series, the presence gauge
+  `exception_management_up`. No prometheus client is in the module and no
+  other series is evidenced; the case counters, escalation counts, outbox
+  depth and consumer lag are **not built**.
+- **Traces — no OpenTelemetry SDK setup is evidenced** (no `TracerProvider`,
+  `MeterProvider` or exporter in `cmd/` or `internal/`; only the A2A skills
+  create spans through the global OTel API).
+- **Analytics** — `cmd/exceptions-projector` and `cmd/exceptions-reports`
+  are built (ADR 0006); see the
+  [observability page](docs/docs/operations/observability.md).
 - **Health endpoints** — `GET /healthz` answers `200 {"status":"ok"}`
   (liveness only); `GET /readyz` answers `200 {"status":"ready"}` or `503`
   naming the failing dependency, backed by the drain gate + a Postgres ping
