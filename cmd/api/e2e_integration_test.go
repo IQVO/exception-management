@@ -248,7 +248,7 @@ func TestRealEntryPointServesRestAndRelaysToKafka(t *testing.T) {
 	// declaration fact from the relay's topic.
 	t.Run("policy declare replays and relays", func(t *testing.T) {
 		kafkatest.CreateTopic(t, topicEvents)
-		// The relay writes every fact's analytics twin too (ADR 0006); the
+		// The relay writes every fact's analytics twin too (ADR 0013); the
 		// test broker has auto-creation OFF, so the topic must exist first.
 		kafkatest.CreateTopic(t, topicAnalytics)
 		body := `{"severity":"HIGH","queue":"cps-front","slaMinutes":30}`
@@ -315,7 +315,7 @@ func TestRealEntryPointServesRestAndRelaysToKafka(t *testing.T) {
 		}
 
 		// The analytics twin left through the same relay pass: same id and
-		// payload, dataschema stream "analytics" (ADR 0006).
+		// payload, dataschema stream "analytics" (ADR 0013).
 		twin := kafkatest.ReadN(t, topicAnalytics, 1, 30*time.Second)[0]
 		var twinEnv struct {
 			ID         string          `json:"id"`

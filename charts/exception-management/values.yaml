@@ -331,7 +331,7 @@ frontend:
       cpu: 50m
       memory: 64Mi
 
-# --- Analytics read side (docs/adr/0006) ---
+# --- Analytics read side (docs/adr/0013) ---
 # The exception analytics data product: the projector (cmd/exceptions-projector,
 # the ONLY writer of the analytical database, consuming the analytics topic
 # warehouse.exception-management.analytics) and the read-only reports binary

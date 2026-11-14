@@ -167,7 +167,7 @@ func TestRelay_RealPostgresAndKafka_PublishesTheExactEnvelopes(t *testing.T) {
 	pool := pgtest.NewPool(t)
 	eventsTopic := outboundkafka.TopicEvents
 	kafkatest.CreateTopic(t, eventsTopic)
-	// The relay writes every fact's analytics twin too (ADR 0006); the test
+	// The relay writes every fact's analytics twin too (ADR 0013); the test
 	// broker has auto-creation OFF, so the topic must exist before the drain.
 	kafkatest.CreateTopic(t, outboundkafka.TopicAnalytics)
 

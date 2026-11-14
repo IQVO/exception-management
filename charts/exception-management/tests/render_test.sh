@@ -341,7 +341,7 @@ for component in api mcp frontend; do
   grep -q "app.kubernetes.io/component: $component\$" <<<"$all3" || fail "$component was not rendered when mcp.enabled=true and frontend.enabled=true"
 done
 
-# --- the optional analytics components (ADR 0006) ---------------------------
+# --- the optional analytics components (ADR 0013) ---------------------------
 # Off by default: the default render is the api alone.
 if grep -q 'app.kubernetes.io/component: analytics-' <<<"$default_render"; then
   fail "the analytics components must not render by default"

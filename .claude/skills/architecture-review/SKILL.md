@@ -40,7 +40,7 @@ check a design decision against this fleet's standing architecture.
    documented zero-write constraint (e.g. warehouse-ops-agent v1), check
    no mutating HTTP method or MCP tool without `ReadOnlyHint: true` was
    added to an outbound/inbound surface bound by that constraint.
-4. **Analytics isolation (ADR-0006-style, where this repo has an analytics
+4. **Analytics isolation (ADR-0013-style, where this repo has an analytics
    read side).** The OLTP domain/application layers must never import the
    analytics store or read model; the analytics side must depend on nothing
    internal except itself. This repo has no analytics read side today — if

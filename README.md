@@ -154,7 +154,7 @@ Seven published event types — `ExceptionOpened`, `ExceptionTriaged`,
 (entity `exceptionpolicy`) — go through the transactional outbox to BOTH
 `warehouse.exception-management.events` (the integration topic) and
 `warehouse.exception-management.analytics` (this service's own analytics
-stream, ADR 0006), specified in `apis/asyncapi.yaml`.
+stream, ADR 0013), specified in `apis/asyncapi.yaml`.
 
 Every Kafka message on both topics is a **CloudEvents 1.0** event in
 structured content mode (ADR 0004), header
@@ -251,7 +251,7 @@ and run at boot).
 
 ### Analytics data product (exception analytics)
 
-An additive analytical read side (ADR 0006) built from this service's own
+An additive analytical read side (ADR 0013) built from this service's own
 published facts, delivered on the separate topic
 `warehouse.exception-management.analytics`, projected into a **separate**
 analytical database, and served read-only. Three processes with one writer:
@@ -292,7 +292,7 @@ What exists today, and what deliberately does not (see the
   `MeterProvider` or exporter in `cmd/` or `internal/`; only the A2A skills
   create spans through the global OTel API).
 - **Analytics** — `cmd/exceptions-projector` and `cmd/exceptions-reports`
-  are built (ADR 0006); see the
+  are built (ADR 0013); see the
   [observability page](docs/docs/operations/observability.md).
 - **Health endpoints** — `GET /healthz` answers `200 {"status":"ok"}`
   (liveness only); `GET /readyz` answers `200 {"status":"ready"}` or `503`

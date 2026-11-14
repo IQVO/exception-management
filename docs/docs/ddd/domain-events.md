@@ -22,7 +22,7 @@ Integration topic `warehouse.exception-management.events`, `source`
 (the source type for the policy event), `dataschema`
 `urn:warehouse:exception-management:events:<EventName>:v1`. A
 `warehouse.exception-management.analytics` mirror of the seven analytics types is declared in ADR 0004 and consumed by
-`cmd/exceptions-projector` (ADR 0006; see [Observability](/docs/operations/observability#analytics-projector-and-reports)).
+`cmd/exceptions-projector` (ADR 0013; see [Observability](/docs/operations/observability#analytics-projector-and-reports)).
 
 | Event | Raised when |
 | --- | --- |

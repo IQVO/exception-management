@@ -26,7 +26,7 @@ const (
 	TopicEvents = "warehouse.exception-management.events"
 	// TopicAnalytics is the analytics twin of the integration topic: every
 	// published type ALSO goes there, byte-identical except for the
-	// dataschema stream segment (ADR 0006). Only cmd/exceptions-projector
+	// dataschema stream segment (ADR 0013). Only cmd/exceptions-projector
 	// consumes it; it is not an integration contract.
 	TopicAnalytics = "warehouse.exception-management.analytics"
 	// DLQSuffix extends a topic name into its dead-letter topic.
@@ -76,7 +76,7 @@ func decodeData(raw json.RawMessage) (any, error) {
 
 // Encode maps one persisted outbox fact to its CloudEvents messages: the
 // integration twin on TopicEvents and the analytics twin on TopicAnalytics
-// (ADR 0006) — one CloudEvents id, byte-identical payloads, dataschemas
+// (ADR 0013) — one CloudEvents id, byte-identical payloads, dataschemas
 // `urn:warehouse:exception-management:{events,analytics}:<Event>:v1`. A fact
 // the service does not publish yields NO message and NO error — the caller
 // (the relay) dead-letters the row. A known fact that cannot be built into a

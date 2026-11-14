@@ -110,7 +110,7 @@ own app.kubernetes.io/component label; the api Service never selects it
 {{- end }}
 
 {{/*
-Fully qualified names of the analytics components (ADR 0006): the projector
+Fully qualified names of the analytics components (ADR 0013): the projector
 (the ONLY writer of the analytical database) and the read-only reports
 binary. Each is its own workload with its own app.kubernetes.io/component
 label; a Service never selects more than one of them
@@ -138,16 +138,16 @@ Name of the Secret holding ANALYTICS_DATABASE_URL: the operator's own
 {{- end }}
 
 {{/*
-Analytics guard (ADR 0006): the projector and reports binaries exit at boot
+Analytics guard (ADR 0013): the projector and reports binaries exit at boot
 without ANALYTICS_DATABASE_URL, and the projector without KAFKA_BROKERS
 (always required by this chart) and ANALYTICS_CONSUMER_GROUP (no default).
 Refuse them at render time, only while analytics is on, naming the value.
 */}}
 {{- define "exception-management.requireAnalyticsConfig" -}}
 {{- if not (or .Values.analytics.url .Values.analytics.existingSecret) -}}
-{{- fail "analytics.enabled is true but neither analytics.url nor analytics.existingSecret is set: the projector and reports binaries exit at boot without ANALYTICS_DATABASE_URL (ADR 0006)." -}}
+{{- fail "analytics.enabled is true but neither analytics.url nor analytics.existingSecret is set: the projector and reports binaries exit at boot without ANALYTICS_DATABASE_URL (ADR 0013)." -}}
 {{- end -}}
-{{- $_ := required "analytics.enabled is true but analytics.consumerGroup is empty: the projector exits at boot without ANALYTICS_CONSUMER_GROUP, a stable Kafka group id (ADR 0006)." .Values.analytics.consumerGroup -}}
+{{- $_ := required "analytics.enabled is true but analytics.consumerGroup is empty: the projector exits at boot without ANALYTICS_CONSUMER_GROUP, a stable Kafka group id (ADR 0013)." .Values.analytics.consumerGroup -}}
 {{- end -}}
 
 {{/*

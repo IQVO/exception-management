@@ -26,3 +26,4 @@ section.
 | [0010](/docs/adr/0010-yard-exceptions-consumers-and-routing) | yard exceptions consumers and routing | Accepted (2026-11-05) |
 | [0011](/docs/adr/0011-package-missed-load-consumer) | PackageMissedLoad consumer | Accepted (2026-11-06) |
 | [0012](/docs/adr/0012-held-stock-exception-cases) | held-stock exception cases — one case per held unit, auto-resolved on disposition | Accepted (2026-11-12) |
+| [0013](/docs/adr/0013-analytics-read-side) | the analytics read side — analytics twin topic, projector, analytical database, reports | Accepted (2026-11-14, recorded retroactively; built 2026-10-21) |

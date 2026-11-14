@@ -15,7 +15,7 @@ import (
 // The contract both stores must satisfy identically: the Postgres fold
 // semantics and the report definitions, exercised by one script of events.
 // The unit test runs it against Memory; the integration test runs it against
-// real Postgres (ADR 0006: the two can never drift).
+// real Postgres (ADR 0013: the two can never drift).
 
 const (
 	sourceTaskCE = "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed"

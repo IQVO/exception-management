@@ -1,5 +1,5 @@
 // Command exceptions-reports is the read-only HTTP reader of the
-// exception-management analytics read side (ADR 0006):
+// exception-management analytics read side (ADR 0013):
 // GET /reports/root-cause-frequency, GET /reports/mean-time-to-resolve,
 // GET /reports/sla-breach-rate, GET /reports/freshness and /healthz on
 // :8092, answered from the ANALYTICAL database only (a read-only pool; the

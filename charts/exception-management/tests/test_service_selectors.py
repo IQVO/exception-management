@@ -392,7 +392,7 @@ def check_frontend(failures: list[str]) -> None:
 
 
 def check_analytics(failures: list[str]) -> None:
-    """The analytics read side (ADR 0006): the projector Deployment (NO
+    """The analytics read side (ADR 0013): the projector Deployment (NO
     Service of its own) and the reports Deployment + Service, each pinned to
     its own component so a Service selects exactly one Deployment."""
     analytics = ["--set", "analytics.enabled=true", "--set", "analytics.url=postgres://u@h/analytics"]

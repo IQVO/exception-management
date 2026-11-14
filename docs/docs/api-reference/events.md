@@ -33,7 +33,7 @@ A breaking payload change gets a new `.v2` type and dataschema; an existing one 
 
 Topic `warehouse.exception-management.events`, written by the outbox relay only
 ([ADR 0005](/docs/adr/0005-outbox-relay-attempt-cap-and-dlq)). The analytics mirror topic
-(`warehouse.exception-management.analytics`, ADR 0004 and ADR 0006) is consumed by this repository's own
+(`warehouse.exception-management.analytics`, ADR 0004 and ADR 0013) is consumed by this repository's own
 `cmd/exceptions-projector` (seven types, see [Observability](/docs/operations/observability#analytics-projector-and-reports));
 no other consumer of it is evidenced.
 
