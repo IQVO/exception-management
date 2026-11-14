@@ -42,5 +42,5 @@ Read models (projections, never aggregates): open cases by queue, SLA report, ro
 - `AutoResolveOnCorrelation` — consumer-driven; applies the policy rule (e.g. `OrderRepromised` closes the `TaskCPTMissed` case for the same work unit).
 - `SweepSLABreaches` — bounded ticker; sets the flag and raises `ExceptionEscalated`.
 - `DeclareExceptionPolicy` — new policy version.
-- `OpenCartonDiscrepancy` (ADR 0006), `OpenYardCheckDiscrepancies` (ADR 0010) — source-specific openers (open or touch the routed case).
+- `OpenCartonDiscrepancy` (ADR 0006), `OpenYardCheckDiscrepancies` (ADR 0010), `AutoResolveHeldStock` (ADR 0012) — source-specific openers (open or touch the routed case).
 - `ListOpenExceptions`, `GetException`, `ListExceptionPolicies`, `GetSLAReport` — reads (REST, read-only MCP and A2A).
