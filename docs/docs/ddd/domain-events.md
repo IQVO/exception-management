@@ -21,8 +21,8 @@ Integration topic `warehouse.exception-management.events`, `source`
 `/warehouse/exception-management`, `subject` and Kafka key = the case id
 (the source type for the policy event), `dataschema`
 `urn:warehouse:exception-management:events:<EventName>:v1`. A
-`warehouse.exception-management.analytics` mirror of every type is
-declared in ADR 0004 but **not built yet** (roadmap: the projector).
+`warehouse.exception-management.analytics` mirror of the seven analytics types is declared in ADR 0004 and consumed by
+`cmd/exceptions-projector` (ADR 0006; see [Observability](/docs/operations/observability#analytics-projector-and-reports)).
 
 | Event | Raised when |
 | --- | --- |
