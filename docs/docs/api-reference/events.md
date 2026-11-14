@@ -54,8 +54,8 @@ is visible on the case, not on the wire. Outbox rows the encoder refuses, or tha
 
 ## Consumed
 
-Fifteen case sources, two held-stock closing facts and one correlation fact, each under its pinned
-consumer group. Dispatch is on
+Seventeen case sources, two held-stock closing facts and one correlation fact (twenty types), read by
+eleven consumers, each under its pinned consumer group. Dispatch is on
 the FULL type; every other type on those topics is ignored (commit past).
 
 | Type | Topic | Consumer group env |

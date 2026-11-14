@@ -25,5 +25,5 @@ marked *roadmap* where they appear.
 | Sequence diagrams | [Sequence diagrams](/docs/ddd/sequence-diagrams) | The end-to-end flows: open/touch, triage/assign/resolve, auto-resolve, SLA sweep. |
 | Domain events | [Domain events](/docs/ddd/domain-events) | Every published and consumed event with its full payload. |
 | Ubiquitous language | [Ubiquitous language](/docs/ddd/ubiquitous-language) | The terms, exactly as the code uses them. |
-| Use cases | [Use cases](/docs/ddd/use-cases) | The eleven application use cases, REST and consumer-driven. |
+| Use cases | [Use cases](/docs/ddd/use-cases) | The fourteen application use cases (plus two claim wrappers), REST and consumer-driven. |
 | Subdomain classification | [Subdomain classification](/docs/ddd/subdomain-classification) | Why this is a Supporting subdomain today. |

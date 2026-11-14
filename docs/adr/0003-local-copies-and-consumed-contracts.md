@@ -96,3 +96,8 @@ and writes nothing.
   correlation stay excluded from v1.
 - Six consumer groups' worth of lag is the cost of keeping this service
   independent of its producers' availability.
+
+## Addendum 2026-11-13: current state
+
+The ten consumed types, the six group variables and "six consumer groups" above are the original set. At `origin/develop`, `apis/asyncapi.yaml` declares 20 consumed types (17 case sources, 2 held-stock closing facts, `OrderRepromised` for correlation), read by eleven consumers each under its own pinned group (`cmd/api/inbound.go`, `buildConsumers`; `consumerGroupEnvs` in `cmd/api/config.go`). ADR 0006 added `CartonDiscrepancyRaised`, ADR 0010 the yard-management and dock-scheduling types, ADR 0011 `PackageMissedLoad`, ADR 0012 `StockHeld`, `StockReleased` and `StockDispositioned` under a second group on the inventory topic.
+The rows marked "pending the producer's promotion PR" or "producer ships in wave 3" are no longer pending: the producers publish those types on their integration topics (fulfillment-execution `apis/asyncapi.yaml:58,70-71`; inventory-storage `apis/asyncapi.yaml:170-172,205-206`; returns-processing `apis/asyncapi.yaml:112`).

@@ -10,8 +10,10 @@ sidebar_position: 1
 The application layer (`internal/application/usecases`) is thin: each use
 case enforces one cross-aggregate rule, loads what it needs through the
 ports, saves inside one unit of work and returns the events for the outbox.
-This is the complete list — there is no use case that creates a case from
-REST and none that reopens a resolved case.
+Fourteen use cases are listed below, plus two thin wrappers that claim the
+CloudEvents id before calling one of them (`ConsumeFact` and
+`ConsumeCorrelation`, `consume_fact.go`). There is no use case that creates
+a case from REST and none that reopens a resolved case.
 
 ## Consumer-driven use cases
 
@@ -20,7 +22,9 @@ REST and none that reopens a resolved case.
 The heart of the context. One consumed exception-class fact (a
 `TaskCPTMissed`, a `BacklogThresholdBreached`, an at-risk acknowledgement,
 an orphaned hold, a count discrepancy, an unlocated stock item, a diverted
-package, a weight discrepancy, an unexpected return) becomes either:
+package, a weight discrepancy, an unexpected return, a `StockHeld`, a
+rejected yard visit, a trailer seal exception, a trailer dwell, a dock
+appointment no-show, a missed load) becomes either:
 
 - **Open** — first occurrence of the dedup key: the case is created under
   the current policy version for the source type (severity, queue,
@@ -62,28 +66,58 @@ to the pure `BreachesAt`: every open case past its `slaDueAt` that has not
 been flagged gets the escalated flag and raises `ExceptionEscalated`
 exactly once. The sweeper reports facts; it never blocks work.
 
+### 4. `OpenCartonDiscrepancy` (`carton_discrepancy.go`)
+
+One consumed `CartonDiscrepancyRaised` becomes one routed case per
+`(receipt_id, sscc or "-", kind)`. It builds the `Fact` and calls
+`ConsumeFact`, so the claim and the open-or-touch of use case 1 apply
+unchanged. The only added decision is the policy source type: `UnlabelledCarton` and
+`CartonOverLimit` route to `...CartonDiscrepancyRaised#receiving-lead`, every other kind
+(unknown kinds included) to `...#problem-solve` (ADR 0006).
+
+### 5. `OpenYardCheckDiscrepancies` (`yard_check.go`)
+
+One consumed `YardCheckClosed` carries a list of discrepancies. This use
+case claims the CloudEvents id ONCE and opens or touches one case per
+discrepancy in the same unit of work (dedup subject: yard check id, kind,
+location and trailer id, unit number or `-`), so a rollback never leaves half of
+a check opened. A check with no discrepancies claims the id and opens
+nothing. `ConsumeFact` cannot serve here because it claims per fact (ADR 0010).
+
+### 6. `AutoResolveHeldStock` (`held_stock.go`)
+
+The closing half of the held-stock cases (ADR 0012). A consumed
+`StockReleased`, or a `StockDispositioned` of `RELEASE`, `RETURN_TO_VENDOR` or
+`SCRAP`, auto-resolves the open case of that held unit (dedup key
+`StockHeld`, held unit id, no site) with the outcome in the resolution note
+and raises `ExceptionAutoResolved`. A `REWORK` disposition keeps the unit held, so it only
+touches the case. A unit this service never opened a case for, or a case
+already resolved, is a no-op that still commits the claim; a disposition outside
+the pinned set is `ErrUnknownDisposition` (WARN, commit past). No
+policy rule is consulted: the close is definitional.
+
 ## REST command use cases
 
-### 4. `TriageException` (`commands.go`)
+### 7. `TriageException` (`commands.go`)
 
 `POST /exceptions/{caseId}/triage-decisions` with `{severity, queue}`: sets or
 changes severity and queue, records the operator as actor. Raises
 `ExceptionTriaged`. Rejected with `409 case-already-resolved` on a terminal
 case.
 
-### 5. `AssignException`
+### 8. `AssignException`
 
 `POST /exceptions/{caseId}/assignments` with `{assignee}`: gives the case an
 owner; reassignment is allowed while unresolved. Raises
 `ExceptionAssigned`.
 
-### 6. `ResolveException`
+### 9. `ResolveException`
 
 `POST /exceptions/{caseId}/resolutions` with `{resolutionCode, rootCause,
 note?}`: the terminal transition. Raises `ExceptionResolved`. Any later
 command on the case is a `409 case-already-resolved` (`ErrCaseClosed`).
 
-### 7. `DeclareExceptionPolicy` (`declare_policy.go`)
+### 10. `DeclareExceptionPolicy` (`declare_policy.go`)
 
 `PUT /exception-policies/{sourceType}`: appends the next version of the
 handling policy (severity, queue, `slaMinutes`, optional
@@ -94,7 +128,7 @@ racing another writer of the same next version is
 
 ## Read use cases
 
-### 8. `ListOpenExceptions` (`reads.go`)
+### 11. `ListOpenExceptions` (`reads.go`)
 
 `GET /exceptions` — the operator listing. Despite the historical name
 (inherited from the guide's "open cases" view), the contract is: every case
@@ -105,20 +139,20 @@ one (resolve activity is part of the record). Filters: `status`, `queue`,
 the use case's `Page` serves it and its `Execute` walks every page for the
 `list_open_exceptions` MCP tool and the A2A skill, which return complete data.
 
-### 9. `GetException`
+### 12. `GetException`
 
 `GET /exceptions/{caseId}` — the whole case: dedup identity, status,
 severity, queue, occurrence count, escalated flag, assignee, the SLA clock,
 the frozen `sourcePayload`, the resolution (and the auto-resolve evidence
 when it closed itself) and the audit trail. Also behind `get_exception`.
 
-### 10. `ListExceptionPolicies`
+### 13. `ListExceptionPolicies`
 
 `GET /exception-policies` — the latest version per source type, ordered by
 source type, one keyset page at a time (`{items, nextCursor}`). Its `Execute`
 walks every page for `get_exception_policies` and the A2A skill.
 
-### 11. `GetSLAReport`
+### 14. `GetSLAReport`
 
 The MCP `get_sla_report` view of the open caseload: `openCases`,
 `breached` (open past `slaDueAt`), `escalated`, and the open counts

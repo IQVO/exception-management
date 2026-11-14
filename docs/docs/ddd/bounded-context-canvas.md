@@ -28,6 +28,8 @@ flowchart LR
     IS["inventory-storage"] -->|warehouse.inventory.events| EM
     YM["yard-management"] -->|warehouse.yard-management.events| EM
     DS["dock-scheduling"] -->|warehouse.dock-scheduling.events| EM
+    IR["inbound-receiving"] -->|warehouse.inbound-receiving.events| EM
+    OS["outbound-shipping"] -->|warehouse.outbound-shipping.events| EM
     OP(["Operators, console"]) -->|"REST /exceptions"| EM
     EM["exception-management"]
 ```
@@ -36,7 +38,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    EM["exception-management"] -->|warehouse.exception-management.events| ANY["Any consumer<br/>(analytics: roadmap)"]
+    EM["exception-management"] -->|warehouse.exception-management.events| ANY["Any consumer<br/>(none evidenced)"]
+    EM -->|warehouse.exception-management.analytics| PRJ["cmd/exceptions-projector<br/>(analytical DB writer)"]
     EM -->|"REST reads"| OP(["Operators, console"])
     EM -->|"MCP read-only tools"| AG(["warehouse-ops-agent"])
     EM -->|"poison rows"| DLQ["warehouse.exception-management.events.dlq"]

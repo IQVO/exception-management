@@ -68,10 +68,13 @@ mutation of v1.
 
 ## Consumed
 
-Nine case sources plus one correlation fact, each under its pinned
-consumer group. Dispatch is on the FULL type; every other type on those
-topics is ignored; anything that is not a valid CloudEvent is logged and
-skipped (WARN, commit past).
+Seventeen case-source types and two held-stock closing facts, plus one
+correlation fact (twenty types in all, the consumed messages of
+`apis/asyncapi.yaml`), read by eleven consumers — ten fact consumers and
+the correlation consumer, each under its pinned consumer group
+(`cmd/api/inbound.go`). Dispatch is on the FULL type; every other type on
+those topics is ignored; anything that is not a valid CloudEvent is logged
+and skipped (WARN, commit past).
 
 | Type (prefix `com.warehouse.`) | Topic | Dedup subject | Notes |
 | --- | --- | --- | --- |
