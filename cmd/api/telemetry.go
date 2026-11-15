@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/claudioed/exception-management/internal/adapters/outbound/telemetry"
+	"github.com/claudioed/exception-management/internal/application/ports"
 )
 
 // defaultServiceName is the OTEL_SERVICE_NAME default: the name every span,
@@ -42,6 +43,20 @@ func loadTelemetryEnv(lookup func(string) string) telemetryEnv {
 		serviceVersion: or("SERVICE_VERSION", telemetry.DefaultServiceVersion),
 		otlpEndpoint:   or("OTEL_EXPORTER_OTLP_ENDPOINT", telemetry.DefaultEndpoint),
 	}
+}
+
+// newCaseMetrics builds the Tier 2 counter (exception.cases.opened) on the
+// MeterProvider startTelemetry installed. It fails only on an invalid
+// instrument name, a programming error: the service then runs without the
+// counter, never without consuming facts, so the error is logged and a nil
+// port (the use case's no-op) is returned. It must run after startTelemetry.
+func newCaseMetrics(logger *slog.Logger) ports.CaseMetrics {
+	m, err := telemetry.NewCaseMetrics()
+	if err != nil {
+		logger.Warn("case metrics unavailable; the service will run without the exception.cases.opened counter", "error", err)
+		return nil
+	}
+	return m
 }
 
 // bootTelemetry reads the observability environment and brings OpenTelemetry

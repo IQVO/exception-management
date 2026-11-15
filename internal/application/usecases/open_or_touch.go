@@ -41,20 +41,33 @@ type OpenOrTouchException struct {
 	IDs        ports.IDGen
 	Clock      ports.Clock
 	UnitOfWork ports.UnitOfWork // nil = unwrapped
+	// Metrics records the business outcome of each fact (the Tier 2 counter,
+	// ADR 0014); nil records nothing.
+	Metrics ports.CaseMetrics
 }
 
-// Execute applies the fact and returns the case it opened or touched.
+// Execute applies the fact and returns the case it opened or touched. Every
+// call is counted once through Metrics: the decision, or the reason the fact
+// was refused.
 func (uc *OpenOrTouchException) Execute(ctx context.Context, fact Fact) (*exceptioncase.Case, error) {
+	c, outcome, err := uc.decide(ctx, fact)
+	uc.record(ctx, c, outcome, err)
+	return c, err
+}
+
+// decide is Execute without the metrics: it applies the fact and reports
+// what it did.
+func (uc *OpenOrTouchException) decide(ctx context.Context, fact Fact) (*exceptioncase.Case, openOutcome, error) {
 	key, err := shared.NewDedupKey(fact.SourceType, fact.SourceSubject, fact.SiteID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	policy, err := uc.Policies.Get(ctx, fact.policyType())
 	if err != nil {
 		if errors.Is(err, ports.ErrNotFound) {
-			return nil, fmt.Errorf("%w: %s", ErrPolicyUndeclared, fact.policyType())
+			return nil, 0, fmt.Errorf("%w: %s", ErrPolicyUndeclared, fact.policyType())
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	now := uc.Clock.Now()
 	in := exceptioncase.OpenInput{
@@ -69,19 +82,21 @@ func (uc *OpenOrTouchException) Execute(ctx context.Context, fact Fact) (*except
 	}
 	latest, err := uc.Cases.FindOpenByDedupKey(ctx, key)
 	if err != nil && !errors.Is(err, ports.ErrNotFound) {
-		return nil, err
+		return nil, 0, err
 	}
 	var c *exceptioncase.Case
+	outcome := openedCase
 	if latest == nil {
 		c, err = exceptioncase.Open(in)
 	} else {
 		if latest.SourceEventID() == fact.SourceEventID {
-			return latest, nil // replay of the opening event: idempotent no-op
+			return latest, replayedCase, nil // replay of the opening event: idempotent no-op
 		}
+		outcome = touchedCase
 		c, err = exceptioncase.OpenOrTouch(latest, in)
 	}
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	err = atomically(ctx, uc.UnitOfWork, func(ctx context.Context) error {
 		if err := uc.Cases.Save(ctx, c); err != nil {
@@ -90,9 +105,9 @@ func (uc *OpenOrTouchException) Execute(ctx context.Context, fact Fact) (*except
 		return uc.Events.PublishCaseEvents(ctx, c.DomainEvents()...)
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return c, nil
+	return c, outcome, nil
 }
 
 // policyType is the source type the policy is looked up under.
