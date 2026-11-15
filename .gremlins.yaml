@@ -28,12 +28,15 @@ unleash:
     # tagless-switch-under-reports pitfall before assuming a low number
     # means missing tests.
     #
-    # Measured 2026-10-21 (gremlins v0.6.0), per package — all survivors
-    # killed before pinning:
-    #   internal/domain/exceptioncase   efficacy 100.00%  mutant-coverage 100.00%  (51 killed / 0 lived)
-    #   internal/domain/exceptionpolicy efficacy 100.00%  mutant-coverage 100.00%  (29 killed / 0 lived)
-    #   internal/domain/shared          efficacy 100.00%  mutant-coverage 100.00%  (36 killed / 0 lived)
-    # The gate sits 5 points under the floor so a stray equivalent mutant
-    # fails the build loudly instead of silently eroding the floor.
-    efficacy: "95"
-    mutant-coverage: "95"
+    # Measured 2026-11-15 (gremlins v0.6.0, `make mutation-full` on ./internal/domain,
+    # cold test cache), per package -- no survivors, no uncovered mutants:
+    #   internal/domain/exceptioncase   efficacy 100.00%  mutant-coverage 100.00%  (53 killed / 0 lived / 0 not covered)
+    #   internal/domain/exceptionpolicy efficacy 100.00%  mutant-coverage 100.00%  (29 killed / 0 lived / 0 not covered)
+    #   internal/domain/shared          efficacy 100.00%  mutant-coverage 100.00%  (49 killed / 0 lived / 0 not covered)
+    #   aggregate (./internal/domain)   efficacy 100.00%  mutant-coverage 100.00%  (131 killed)
+    # Fleet standard 99/99: gremlins fails when measured <= threshold, so 99 needs
+    # >= 99.01% measured. Thresholds are plain numbers on purpose -- a quoted
+    # YAML string is read as 0 by gremlins v0.6.0 (float type assertion) and the
+    # gate never fails (dormant).
+    efficacy: 99
+    mutant-coverage: 99

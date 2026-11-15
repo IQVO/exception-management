@@ -139,7 +139,7 @@ correlated fact, work unit ref, policy version — each defined on
 ## Verification metrics
 
 - Mutation gate over every domain package (`make mutation`, measured
-  100/100, thresholds 95/95).
+  100/100, thresholds 99/99).
 - Golden exact-JSON test per published type; `TestEventCatalogueMatchesContract`
   checks ADR 0004's catalogue against `apis/asyncapi.yaml`.
 - godog scenarios: fact → open, repeated fact → touch,
