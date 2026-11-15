@@ -163,7 +163,15 @@ func TestReportsServeTheSeededProjectionAndStopCleanly(t *testing.T) {
 	// run() takes no context; SIGTERM is the binary's stop path. A retried
 	// signal makes the drain deterministic even if the first one lands
 	// before run() installs its own handler.
-	for range 5 {
+	//
+	// The stop is bounded by the HTTP drain (milliseconds here) PLUS the
+	// final telemetry flush: no Collector listens in this test, so the flush
+	// of the spans and metrics the requests above produced runs to its
+	// deadline (telemetryFlushTimeout) before run() returns. The window is
+	// that documented bound plus a margin, so a stop slower than the bound
+	// still fails.
+	deadline := time.After(telemetryFlushTimeout + 2*time.Second)
+	for {
 		_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
 		select {
 		case err := <-done:
@@ -171,10 +179,11 @@ func TestReportsServeTheSeededProjectionAndStopCleanly(t *testing.T) {
 				t.Fatalf("a SIGTERM'd reports server must drain cleanly, got %v", err)
 			}
 			return
+		case <-deadline:
+			t.Fatalf("the reports server did not stop on SIGTERM within %s (HTTP drain + telemetry flush bound)", telemetryFlushTimeout+2*time.Second)
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	t.Fatal("the reports server did not stop on SIGTERM")
 }
 
 // assertMeanTimeToResolve proves the per-queue timing: ps-expedite resolved
