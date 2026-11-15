@@ -78,7 +78,7 @@ and skipped (WARN, commit past).
 
 | Type (prefix `com.warehouse.`) | Topic | Dedup subject | Notes |
 | --- | --- | --- | --- |
-| `wes.fulfillment-execution.task.TaskCPTMissed` | `warehouse.fulfillment.events` | task id | Re-fires every sweep tick by design; `order_ref` = work unit `{order_id}-line-{line_no}` feeds the correlation |
+| `wes.fulfillment-execution.task.TaskCPTMissed` | `warehouse.fulfillment.events` | `order_ref` (the work unit `{order_id}-line-{line_no}`; `task_id` stays in the frozen payload only) | Re-fires every sweep tick by design; the same `order_ref` feeds the correlation |
 | `wes.fulfillment-execution.package.PackageDiverted` | `warehouse.fulfillment.events` | package id | Promoted to the integration topic by the producer (PR #234, merged 2026-10-21) |
 | `wes.fulfillment-execution.package.WeightDiscrepancyDetected` | `warehouse.fulfillment.events` | package id | Same promotion |
 | `wes.work-planning.workpool.BacklogThresholdBreached` | `warehouse.work-planning.events` | path id | `data` carries only `path_id` (the producer's contract) |
@@ -122,7 +122,7 @@ process-once (ADR 0003).
   "data": {
     "case_id": "case-1b4e28ba-2b11-53ba-bc5f-4a5d7e8f9a01",
     "source_type": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
-    "source_subject": "task-8a1f",
+    "source_subject": "wu-8a1f",
     "site_id": null,
     "severity": "HIGH",
     "queue": "cpt-missed",
