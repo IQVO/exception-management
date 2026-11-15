@@ -145,6 +145,38 @@ func TestResolvedRequiresAResolutionCodeAndIsTerminal(t *testing.T) {
 	}
 }
 
+// Contract (apis/openapi.yaml, ResolveRequest): resolutionCode and rootCause
+// are codes matching ^[A-Z0-9_]+$, "a code, not prose". The REST adapter has
+// always refused anything else; the aggregate (the use case's backstop for
+// every caller) now refuses the same text, so no non-REST caller can record
+// prose or lower-case as a code. Blank keeps its own error and a refused
+// resolve leaves the case untouched.
+func TestResolveRefusesAResolutionCodeAndRootCauseOutsideThePattern(t *testing.T) {
+	t.Parallel()
+	op := operator(t)
+	bad := []string{"bin-mismatch", "relocated", "Relocated", "WORK COMPLETED", "WORK.COMPLETED", "É", "CODE\n", "A-B"}
+	for _, v := range bad {
+		c := openedCase(t)
+		if err := c.Resolve(v, "OPERATOR_UNAVAILABLE", "", op, openedAt.Add(time.Minute)); !errors.Is(err, ErrInvalidResolutionCode) {
+			t.Errorf("code %q: err = %v, want ErrInvalidResolutionCode", v, err)
+		}
+		if err := c.Resolve("WORK_COMPLETED", v, "", op, openedAt.Add(time.Minute)); !errors.Is(err, ErrInvalidRootCause) {
+			t.Errorf("root cause %q: err = %v, want ErrInvalidRootCause", v, err)
+		}
+		if c.Status() != StatusOpen || c.Version() != 1 || len(c.DomainEvents()) != 1 {
+			t.Errorf("%q: a refused resolve must change nothing (status %s, version %d)", v, c.Status(), c.Version())
+		}
+	}
+	// Blank stays blank, not "invalid", and the allowed alphabet passes.
+	c := openedCase(t)
+	if err := c.Resolve(" ", "X", "", op, openedAt.Add(time.Minute)); !errors.Is(err, ErrBlankResolutionCode) {
+		t.Errorf("blank code: err = %v, want ErrBlankResolutionCode", err)
+	}
+	if err := c.Resolve("A_9", "Z0_", "", op, openedAt.Add(time.Minute)); err != nil {
+		t.Errorf("A_9 / Z0_ match the pattern: %v", err)
+	}
+}
+
 // Invariant: ESCALATED is a flag, never a state and never a blocker — every
 // transition still works on an escalated case.
 func TestEscalatedIsAFlagThatNeverBlocksATransition(t *testing.T) {

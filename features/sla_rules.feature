@@ -48,7 +48,7 @@ Feature: SLA clock and sweeper rules
   Scenario: A breached case can still be resolved
     When time advances 45 minutes
     And the SLA sweeper runs
-    And operator op-7 resolves the case with code DONE and root cause handled
+    And operator op-7 resolves the case with code DONE and root cause HANDLED
     Then the case status is RESOLVED
     And the audit trail is OPENED, ESCALATED, RESOLVED
     And the published events are ExceptionOpened, ExceptionEscalated, ExceptionResolved
@@ -67,7 +67,7 @@ Feature: SLA clock and sweeper rules
 
   Scenario: A resolved case leaves the SLA report
     Given a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-2 at site SIM1 with event id evt-2 and payload {"task_id":"task-9b2c"} arrives
-    And operator op-7 resolves the case with code DONE and root cause handled
+    And operator op-7 resolves the case with code DONE and root cause HANDLED
     When time advances 40 minutes
     Then the SLA report counts 1 open, 1 breached and 0 escalated case
 

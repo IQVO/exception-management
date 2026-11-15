@@ -35,7 +35,7 @@ Feature: SLA breach escalates without blocking work
     And the published events are ExceptionOpened, ExceptionEscalated, ExceptionAssigned
 
   Scenario: A resolved case stays resolved and is never swept
-    When operator op-7 resolves the case with code DONE and root cause handled
+    When operator op-7 resolves the case with code DONE and root cause HANDLED
     And time advances 2 hours
     And the SLA sweeper runs
     Then the case is not escalated

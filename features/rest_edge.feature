@@ -58,7 +58,7 @@ Feature: The REST edge of exception management
   Scenario: A resolved case refuses further transitions
     Given a policy is declared for source type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed with severity HIGH queue ps-main and sla 30 minutes
     And a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-1 at site SIM1 with event id evt-1 and payload {"task_id":"task-8a1f"} arrives
-    And operator op resolves the case with code FIXED and root cause done
+    And operator op resolves the case with code FIXED and root cause DONE
     When a POST request is sent to "/exceptions/case-0001/triage-decisions" with key "tri-2" as operator-1 and the JSON body {"severity":"LOW","queue":"ps-main"}
     Then the response status is 409
     And the response problem is "case-already-resolved"
@@ -134,7 +134,7 @@ Feature: The REST edge of exception management
     Given a policy is declared for source type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed with severity HIGH queue ps-main and sla 30 minutes
     And a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-1 at site SIM1 with event id evt-1 and payload {"n":1} arrives
     And a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-2 at site SIM1 with event id evt-2 and payload {"n":2} arrives
-    And operator op resolves the case with code FIXED and root cause done
+    And operator op resolves the case with code FIXED and root cause DONE
     When a GET request is sent to "/exceptions?status=RESOLVED"
     Then the response status is 200
     And the response list "items" has 1 items
