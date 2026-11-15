@@ -248,6 +248,9 @@ Card), `MIGRATIONS_DATABASE_URL`, `LOG_LEVEL`.
 and run at boot).
 `cmd/exceptions-reports`: `ANALYTICS_DATABASE_URL` (**required**),
 `HTTP_ADDR` (`:8092`), `LOG_LEVEL`.
+Every binary also reads `OTEL_EXPORTER_OTLP_ENDPOINT` (`localhost:4317`),
+`OTEL_SERVICE_NAME` (per binary), `SERVICE_VERSION` (`dev`) and `ENVIRONMENT`
+(`local`); none is required.
 
 ### Analytics data product (exception analytics)
 
@@ -275,22 +278,29 @@ curl http://localhost:8092/reports/root-cause-frequency http://localhost:8092/re
 ## Observability
 
 What exists today, and what deliberately does not (see the
-[observability page](docs/docs/operations/observability.md)):
+[observability page](docs/docs/operations/observability.md) and
+[ADR 0014](docs/adr/0014-adopt-the-fleet-observability-standard.md)):
 
+- **Telemetry** — every binary pushes traces and metrics over OTLP/gRPC to
+  `OTEL_EXPORTER_OTLP_ENDPOINT` (`localhost:4317` by default; a missing
+  Collector costs telemetry, never availability) and the Go runtime metrics.
 - **Logs** — structured JSON (`slog`) on stdout, one line per event, level
-  from `LOG_LEVEL`. The lines that matter: boot configuration problems
-  (reported all at once, each naming its variable), readiness dependency
-  failures, consumer skips (an invalid CloudEvent, or a fact for an
+  from `LOG_LEVEL`, with `trace_id`/`span_id` on lines written inside a request.
+  One request line per HTTP request. The lines that matter: boot configuration
+  problems (reported all at once, each naming its variable), readiness
+  dependency failures, consumer skips (an invalid CloudEvent, or a fact for an
   undeclared source type — that WARN is the signal of a missing policy, not
   an incident), relay DLQ writes and sweep escalations.
-- **Metrics** — `GET /metrics` (Prometheus text exposition) is a hand-written
+- **Metrics** — `http.server.request.duration` (histogram, by `http.route`) on
+  the api, reports, MCP and A2A routers, and the business counter
+  `exception.cases.opened` (`outcome` = opened / touched / replayed / rejected,
+  `exception.severity`, `reason`). `GET /metrics` is unchanged: a hand-written
   handler that serves exactly one series, the presence gauge
-  `exception_management_up`. No prometheus client is in the module and no
-  other series is evidenced; the case counters, escalation counts, outbox
+  `exception_management_up`. Case counts by status, escalation counts, outbox
   depth and consumer lag are **not built**.
-- **Traces — no OpenTelemetry SDK setup is evidenced** (no `TracerProvider`,
-  `MeterProvider` or exporter in `cmd/` or `internal/`; only the A2A skills
-  create spans through the global OTel API).
+- **Traces** — one server span per request (named after the route pattern) and
+  the A2A `a2a.skill` spans. The trace does not continue across Kafka (the
+  outbox has no headers column).
 - **Analytics** — `cmd/exceptions-projector` and `cmd/exceptions-reports`
   are built (ADR 0013); see the
   [observability page](docs/docs/operations/observability.md).

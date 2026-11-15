@@ -235,6 +235,44 @@ on the api, not on the mcp component and not on the analytics components.
 {{- end -}}
 
 {{/*
+The observability env every component that runs a binary renders (ADR 0014):
+ENVIRONMENT and SERVICE_VERSION always, OTEL_EXPORTER_OTLP_ENDPOINT and
+OTEL_SERVICE_NAME while otel.enabled. Call with
+(dict "root" . "suffix" "-mcp"): the suffix is appended to otel.serviceName
+(empty for the api). SERVICE_VERSION is otel.serviceVersion, else image.tag,
+else the chart's appVersion.
+*/}}
+{{- define "exception-management.otelEnv" -}}
+- name: ENVIRONMENT
+  value: {{ .root.Values.environment | quote }}
+- name: SERVICE_VERSION
+  value: {{ .root.Values.otel.serviceVersion | default .root.Values.image.tag | default .root.Chart.AppVersion | quote }}
+{{- if .root.Values.otel.enabled }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .root.Values.otel.endpoint | quote }}
+- name: OTEL_SERVICE_NAME
+  value: {{ printf "%s%s" .root.Values.otel.serviceName .suffix | quote }}
+{{- end }}
+{{- end -}}
+
+{{/*
+The four observability variables belong to the chart (environment and otel.*):
+an extraEnv entry of any component naming one would render a duplicate env
+entry that silently wins or loses depending on the order, so it is refused.
+*/}}
+{{- define "exception-management.requireNoOtelEnvOverride" -}}
+{{- $owned := list "ENVIRONMENT" "SERVICE_VERSION" "OTEL_EXPORTER_OTLP_ENDPOINT" "OTEL_SERVICE_NAME" -}}
+{{- $lists := dict "extraEnv" .Values.extraEnv "mcp.extraEnv" .Values.mcp.extraEnv "a2a.extraEnv" .Values.a2a.extraEnv "analytics.projector.extraEnv" .Values.analytics.projector.extraEnv "analytics.reports.extraEnv" .Values.analytics.reports.extraEnv -}}
+{{- range $path, $envs := $lists -}}
+{{- range $envs -}}
+{{- if has (toString .name) $owned -}}
+{{- fail (printf "%s sets %s, which the chart owns: set environment, otel.enabled, otel.endpoint, otel.serviceName or otel.serviceVersion instead." $path .name) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Comma-joined names of this chart's enabled KongPlugins, for the
 konghq.com/plugins annotation on the HTTPRoutes this chart renders
 (httproute.yaml, mcp-route.yaml, a2a-route.yaml). Empty string (annotation omitted) when

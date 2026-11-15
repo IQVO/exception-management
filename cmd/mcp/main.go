@@ -24,12 +24,17 @@
 //	MIGRATIONS_DATABASE_URL  direct DSN for the boot migrations (default DATABASE_URL)
 //	MCP_ADDR                 listen address (default :8090)
 //	LOG_LEVEL                debug | info | warn | error (default info)
+//	OTEL_EXPORTER_OTLP_ENDPOINT  Collector OTLP/gRPC endpoint (default localhost:4317; export never blocks)
+//	OTEL_SERVICE_NAME        service.name of spans, metrics and logs (default exception-management-mcp)
+//	SERVICE_VERSION          service.version (default dev)
+//	ENVIRONMENT              deployment.environment.name (default local)
 package main
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -41,6 +46,7 @@ import (
 	inboundmcp "github.com/claudioed/exception-management/internal/adapters/inbound/mcp"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/system"
+	"github.com/claudioed/exception-management/internal/adapters/outbound/telemetry"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 )
 
@@ -52,6 +58,7 @@ var errNoDatabase = errors.New("DATABASE_URL is required: this context runs on r
 
 func main() {
 	logger := newLogger(getenv("LOG_LEVEL", "info"))
+	slog.SetDefault(logger) // the OpenTelemetry SDK's own diagnostics follow the process logger
 	if err := run(context.Background(), logger); err != nil {
 		logger.Error("mcp server exited with error", "error", err)
 		os.Exit(1)
@@ -70,9 +77,16 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}
 	defer closeAdapters()
 
+	telemetryCfg := loadTelemetryEnv(os.Getenv)
+	flushTelemetry, err := startTelemetry(logger, telemetryCfg)
+	if err != nil {
+		return fmt.Errorf("start telemetry: %w", err)
+	}
+	defer flushTelemetry()
+
 	srv := &http.Server{
 		Addr:              getenv("MCP_ADDR", ":8090"),
-		Handler:           newRouter(inboundmcp.Handler(inboundmcp.NewServer(deps))),
+		Handler:           newRouter(inboundmcp.Handler(inboundmcp.NewServer(deps)), logger, telemetryCfg.serviceName),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	return serveMCP(logger, srv)
@@ -143,10 +157,15 @@ func serveMCP(logger *slog.Logger, srv *http.Server) error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-// newLogger builds the process-wide JSON logger. LOG_LEVEL maps
+// newLogger builds the process-wide JSON logger on stdout. See newLoggerTo.
+func newLogger(level string) *slog.Logger { return newLoggerTo(os.Stdout, level) }
+
+// newLoggerTo builds the JSON logger writing to w. LOG_LEVEL maps
 // debug|info|warn|warning|error (case-insensitive; "warning" is accepted
-// like "warn" fleet-wide), defaulting to Info.
-func newLogger(level string) *slog.Logger {
+// like "warn" fleet-wide), defaulting to Info. The handler is wrapped so a
+// record written with a span-carrying context (the *Context slog variants)
+// also carries trace_id and span_id.
+func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var lvl slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -158,7 +177,7 @@ func newLogger(level string) *slog.Logger {
 	default:
 		lvl = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
+	return slog.New(telemetry.WithTraceContext(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: lvl})))
 }
 
 func getenv(key, fallback string) string {

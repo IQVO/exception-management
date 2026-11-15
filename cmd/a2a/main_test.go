@@ -106,7 +106,7 @@ func TestRunFailsFastBeforeBindingTheListener(t *testing.T) {
 // the real Agent Card.
 func newTestRouter() http.Handler {
 	card := inbounda2a.Card(inbounda2a.Config{AgentURL: testAgentURL, Version: serviceVersion})
-	return newRouter(inbounda2a.Handler(inbounda2a.NewExecutor(inbounda2a.Deps{})), card)
+	return newRouter(inbounda2a.Handler(inbounda2a.NewExecutor(inbounda2a.Deps{})), card, quietLogger(), defaultServiceName)
 }
 
 func TestRouterHealthzIsOpenAndServesOK(t *testing.T) {
