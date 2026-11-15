@@ -133,10 +133,10 @@ func TestCommands_LifecycleAndClosedCase(t *testing.T) {
 		t.Fatalf("assign: %v", err)
 	}
 	res := &usecases.ResolveException{Cases: f.cases, Events: f.ev, Clock: memory.Clock{T: f.now}}
-	if _, err := res.Execute(ctx, c.ID(), "RELOCATED", "bin-mismatch", "", "op-7"); err != nil {
+	if _, err := res.Execute(ctx, c.ID(), "RELOCATED", "BIN_MISMATCH", "", "op-7"); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if _, err := res.Execute(ctx, c.ID(), "RELOCATED", "bin-mismatch", "", "op-7"); !errors.Is(err, exceptioncase.ErrCaseClosed) {
+	if _, err := res.Execute(ctx, c.ID(), "RELOCATED", "BIN_MISMATCH", "", "op-7"); !errors.Is(err, exceptioncase.ErrCaseClosed) {
 		t.Fatalf("second resolve err = %v, want ErrCaseClosed", err)
 	}
 }

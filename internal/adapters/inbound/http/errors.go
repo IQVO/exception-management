@@ -135,6 +135,8 @@ var problemCatalogue = []struct {
 	{shared.ErrBlankActor, invalidActorProblem},
 	{exceptioncase.ErrBlankResolutionCode, invalidResolutionProblem},
 	{exceptioncase.ErrBlankRootCause, invalidResolutionProblem},
+	{exceptioncase.ErrInvalidResolutionCode, invalidResolutionProblem},
+	{exceptioncase.ErrInvalidRootCause, invalidResolutionProblem},
 	{exceptionpolicy.ErrInvalidSourceType, invalidSourceTypeProblem},
 	{exceptionpolicy.ErrInvalidSLA, invalidPolicyProblem},
 

@@ -114,7 +114,13 @@ owner; reassignment is allowed while unresolved. Raises
 ### 9. `ResolveException`
 
 `POST /exceptions/{caseId}/resolutions` with `{resolutionCode, rootCause,
-note?}`: the terminal transition. Raises `ExceptionResolved`. Any later
+note?}`: the terminal transition. `resolutionCode` and `rootCause` are codes
+(`^[A-Z0-9_]+$`, at most 64 characters, per `apis/openapi.yaml`); the REST
+adapter and the aggregate behind the use case both refuse anything else
+(`ErrInvalidResolutionCode`, `ErrInvalidRootCause`, `400 invalid-resolution`).
+Only a manual resolution is checked: an auto-resolution records the rule's
+code and the correlated CloudEvents type as its root cause. Raises
+`ExceptionResolved`. Any later
 command on the case is a `409 case-already-resolved` (`ErrCaseClosed`).
 
 ### 10. `DeclareExceptionPolicy` (`declare_policy.go`)

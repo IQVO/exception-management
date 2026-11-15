@@ -25,13 +25,15 @@ const (
 // domainErrors maps the error names the feature files use to the domain
 // sentinels.
 var domainErrors = map[string]error{
-	"ErrCaseClosed":          exceptioncase.ErrCaseClosed,
-	"ErrBlankResolutionCode": exceptioncase.ErrBlankResolutionCode,
-	"ErrBlankRootCause":      exceptioncase.ErrBlankRootCause,
-	"ErrBlankAssignee":       exceptioncase.ErrBlankAssignee,
-	"ErrBlankQueue":          exceptioncase.ErrBlankQueue,
-	"ErrPolicyUndeclared":    usecases.ErrPolicyUndeclared,
-	"ErrNoEventID":           usecases.ErrNoEventID,
+	"ErrCaseClosed":            exceptioncase.ErrCaseClosed,
+	"ErrBlankResolutionCode":   exceptioncase.ErrBlankResolutionCode,
+	"ErrBlankRootCause":        exceptioncase.ErrBlankRootCause,
+	"ErrInvalidResolutionCode": exceptioncase.ErrInvalidResolutionCode,
+	"ErrInvalidRootCause":      exceptioncase.ErrInvalidRootCause,
+	"ErrBlankAssignee":         exceptioncase.ErrBlankAssignee,
+	"ErrBlankQueue":            exceptioncase.ErrBlankQueue,
+	"ErrPolicyUndeclared":      usecases.ErrPolicyUndeclared,
+	"ErrNoEventID":             usecases.ErrNoEventID,
 }
 
 // registerSetupSteps registers the clock and policy-declaration steps.

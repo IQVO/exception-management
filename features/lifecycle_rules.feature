@@ -55,7 +55,7 @@ Feature: Lifecycle rules of an exception case
 
   Scenario Outline: A case can be resolved from any unresolved status
     Given the case has been brought to status <status>
-    When operator op-7 resolves the case with code RELOCATED and root cause bin-mismatch
+    When operator op-7 resolves the case with code RELOCATED and root cause BIN_MISMATCH
     Then the case status is RESOLVED
     And the case resolution code is RELOCATED
     And the last ExceptionResolved event has ResolutionCode RELOCATED
@@ -69,7 +69,7 @@ Feature: Lifecycle rules of an exception case
   # --- RESOLVED is terminal ----------------------------------------------------
 
   Scenario Outline: A resolved case refuses every further command
-    Given operator op-7 resolves the case with code DONE and root cause handled
+    Given operator op-7 resolves the case with code DONE and root cause HANDLED
     When a POST request is sent to "<path>" with key "<key>" and the JSON body <body>
     Then the response status is 409
     And the response problem is "case-already-resolved"
@@ -83,7 +83,7 @@ Feature: Lifecycle rules of an exception case
       | /exceptions/case-0001/resolutions       | k-res | {"resolutionCode":"AGAIN","rootCause":"HANDLED_AGAIN"} |
 
   Scenario: There is no way back: a resolved case cannot be reopened
-    Given operator op-7 resolves the case with code DONE and root cause handled
+    Given operator op-7 resolves the case with code DONE and root cause HANDLED
     When a POST request is sent to "/exceptions/case-0001/reopenings" with key "k-reopen" and the JSON body {}
     Then the response status is 404
     And the response problem is "not-found"
@@ -126,6 +126,29 @@ Feature: Lifecycle rules of an exception case
       | RELOCATED | bin mismatch       |
       | RELO-CATED | BIN_MISMATCH      |
       | RELOCATED | AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA |
+
+  # The use case is a second way in (the same ResolveException the REST handler
+  # calls): it holds the contract's ^[A-Z0-9_]+$ too, so a caller that skips
+  # the HTTP adapter cannot record prose or lower case as a code.
+  Scenario Outline: The use case refuses a resolution code or root cause outside the contract pattern
+    When operator op-7 resolves the case with code <code> and root cause <cause>
+    Then the command fails with <error>
+    And the case status is OPEN
+    And the case version is 1
+    And the published events are ExceptionOpened
+
+    Examples:
+      | code      | cause        | error                    |
+      | relocated | BIN_MISMATCH | ErrInvalidResolutionCode |
+      | RELO-CATED | BIN_MISMATCH | ErrInvalidResolutionCode |
+      | RELOCATED | bin-mismatch | ErrInvalidRootCause      |
+      | RELOCATED | BIN MISMATCH | ErrInvalidRootCause      |
+
+  Scenario: The use case accepts a code made only of A-Z, 0-9 and underscore
+    When operator op-7 resolves the case with code A_9 and root cause Z0_
+    Then the case status is RESOLVED
+    And the case resolution code is A_9
+    And the case root cause is Z0_
 
   Scenario: A resolution code and a root cause of exactly 64 characters are accepted
     When a POST request is sent to "/exceptions/case-0001/resolutions" with key "k-1" and the JSON body {"resolutionCode":"RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR","rootCause":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}

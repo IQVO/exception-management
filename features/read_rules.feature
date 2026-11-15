@@ -13,7 +13,7 @@ Feature: Read rules of the case listing and the case view
   Scenario: Without a status filter the listing keeps the resolved cases
     Given a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-1 at site SIM1 with event id evt-1 and payload {"task_id":"task-1"} arrives
     And a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-2 at site SIM1 with event id evt-2 and payload {"task_id":"task-2"} arrives
-    And operator op-7 resolves the case with code DONE and root cause handled
+    And operator op-7 resolves the case with code DONE and root cause HANDLED
     When a GET request is sent to "/exceptions"
     Then the response status is 200
     And the response list "items" has 2 items

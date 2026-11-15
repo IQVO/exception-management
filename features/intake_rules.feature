@@ -96,7 +96,7 @@ Feature: Intake rules of the open-or-touch decision
 
   Scenario: A fact after an operator's resolution counts and never reopens the case
     Given a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-1 at site SIM1 with event id evt-1 and payload {"task_id":"task-8a1f"} arrives
-    And operator op-7 resolves the case with code RELOCATED and root cause bin-mismatch
+    And operator op-7 resolves the case with code RELOCATED and root cause BIN_MISMATCH
     When time advances 3 minutes
     And a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-1 at site SIM1 with event id evt-2 and payload {"task_id":"task-8a1f"} arrives
     Then the case status is RESOLVED

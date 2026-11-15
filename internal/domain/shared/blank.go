@@ -44,3 +44,20 @@ func HasNUL(s string) bool {
 func ValidText(s string) bool {
 	return !IsBlank(s) && !HasNUL(s)
 }
+
+// ValidCode reports whether s matches the contract's code pattern
+// `^[A-Z0-9_]+$` (apis/openapi.yaml, ResolveRequest.resolutionCode and
+// rootCause): non-empty and only A-Z, 0-9 and underscore. It is byte-wise,
+// so any other rune, a newline included, fails.
+func ValidCode(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		if (b < 'A' || b > 'Z') && (b < '0' || b > '9') && b != '_' {
+			return false
+		}
+	}
+	return true
+}

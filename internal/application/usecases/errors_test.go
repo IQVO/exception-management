@@ -48,11 +48,22 @@ func TestCommands_RejectBlankActorAndBadState(t *testing.T) {
 		t.Fatal("blank assignee accepted")
 	}
 	res := &usecases.ResolveException{Cases: f.cases, Events: f.ev, Clock: memory.Clock{T: f.now}}
-	if _, err := res.Execute(ctx, c.ID(), "", "rc", "", "op-1"); err == nil {
+	if _, err := res.Execute(ctx, c.ID(), "", "RC", "", "op-1"); err == nil {
 		t.Fatal("blank resolution code accepted")
 	}
 	if _, err := res.Execute(ctx, c.ID(), "CODE", "", "", "op-1"); err == nil {
 		t.Fatal("blank root cause accepted")
+	}
+	// The contract's ^[A-Z0-9_]+$ holds through the use case too, and a
+	// refused resolve leaves the stored case untouched.
+	if _, err := res.Execute(ctx, c.ID(), "relocated", "RC", "", "op-1"); !errors.Is(err, exceptioncase.ErrInvalidResolutionCode) {
+		t.Fatalf("lower-case code: err = %v, want ErrInvalidResolutionCode", err)
+	}
+	if _, err := res.Execute(ctx, c.ID(), "CODE", "bin-mismatch", "", "op-1"); !errors.Is(err, exceptioncase.ErrInvalidRootCause) {
+		t.Fatalf("hyphenated root cause: err = %v, want ErrInvalidRootCause", err)
+	}
+	if got, err := f.cases.FindByID(ctx, c.ID()); err != nil || got.Status() == exceptioncase.StatusResolved {
+		t.Fatalf("a refused resolve must not close the case: %v, %v", got, err)
 	}
 }
 
@@ -61,10 +72,10 @@ func TestResolve_OnClosedCaseIsErrCaseClosed(t *testing.T) {
 	c := f.triagedCase(t)
 	ctx := context.Background()
 	res := &usecases.ResolveException{Cases: f.cases, Events: f.ev, Clock: memory.Clock{T: f.now}}
-	if _, err := res.Execute(ctx, c.ID(), "DONE", "rc", "", "op-1"); err != nil {
+	if _, err := res.Execute(ctx, c.ID(), "DONE", "RC", "", "op-1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := res.Execute(ctx, c.ID(), "DONE", "rc", "", "op-1"); !errors.Is(err, exceptioncase.ErrCaseClosed) {
+	if _, err := res.Execute(ctx, c.ID(), "DONE", "RC", "", "op-1"); !errors.Is(err, exceptioncase.ErrCaseClosed) {
 		t.Fatalf("err = %v, want ErrCaseClosed", err)
 	}
 	tri := &usecases.TriageException{Cases: f.cases, Events: f.ev, Clock: memory.Clock{T: f.now}}

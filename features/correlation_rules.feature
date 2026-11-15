@@ -88,7 +88,7 @@ Feature: Auto-resolve correlation rules
 
   Scenario: A case already resolved by an operator is left as the operator closed it
     Given a fact of type com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed for work unit ord-7-line-1 at site SIM1 with event id evt-1 and payload {"task_id":"task-8a1f"} arrives
-    And operator op-7 resolves the case with code RELOCATED and root cause bin-mismatch
+    And operator op-7 resolves the case with code RELOCATED and root cause BIN_MISMATCH
     When an OrderRepromised fact for order ord-7 with event id evt-9 arrives
     Then the correlation closes 0 cases
     And the case resolution code is RELOCATED
