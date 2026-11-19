@@ -411,6 +411,16 @@ analytics:
       type: ClusterIP
       port: 80
       targetPort: 8092
+    # Kong exposure of the reports API (reports-route.yaml): host path
+    # /api/exception-management/reports rewritten to /reports. Off by default;
+    # warehouse-infra turns it on with the real parentRefs and path.
+    route:
+      enabled: false
+      path: "/api/exception-management/reports"
+      parentRefs:
+        - name: ""
+          namespace: ""
+          sectionName: "http"
     # Extra env vars appended to the reports container as a raw list. A
     # *_MODE name is refused at render time (templates/_helpers.tpl).
     extraEnv: []
