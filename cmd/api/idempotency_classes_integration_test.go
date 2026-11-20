@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	inboundhttp "github.com/claudioed/exception-management/internal/adapters/inbound/http"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres"
@@ -23,6 +24,11 @@ import (
 	"github.com/claudioed/exception-management/internal/testing/pgtest"
 	"github.com/claudioed/exception-management/internal/testing/repocontract"
 )
+
+// The tcpostgres reference keeps the testcontainers postgres module import
+// visible in this file (internal/architecture requires it of every Postgres
+// integration test file); the database itself comes from pgtest.NewPool.
+var _ = tcpostgres.Run
 
 // The fleet replay-class rule over the REAL router and REAL Postgres: a
 // RETRYABLE refusal is not stored. The loser of an optimistic-lock race
@@ -208,4 +214,14 @@ func TestPostgresCaseNotFoundRefusalIsNotStored(t *testing.T) {
 	if status != http.StatusNotFound || strings.Contains(body, "/idempotency-key-reused") {
 		t.Fatalf("a different body under the released key = %d %s, want a new request (404, not the reuse conflict)", status, body)
 	}
+}
+
+// countKey counts the idempotency rows stored for key.
+func countKey(t *testing.T, pool *pgxpool.Pool, key string) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM idempotency_keys WHERE key = $1`, key).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
