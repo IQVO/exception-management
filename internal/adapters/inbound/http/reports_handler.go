@@ -79,12 +79,13 @@ type sourceTypeRowDTO struct {
 	EscalationRate float64 `json:"escalation_rate"`
 }
 
-// Problems of the reports binary.
+// Problems of the reports binary. Its router serves GETs only (no keyed
+// route); the classes are declared anyway (ADR 0015).
 var (
 	invalidReportRange = problem{http.StatusBadRequest, "invalid-report-range",
-		"from and to must form a valid RFC 3339 range of at most 366 days", ""}
+		"from and to must form a valid RFC 3339 range of at most 366 days", "", replayFinal}
 	reportStoreError = problem{http.StatusInternalServerError, "report-store-error",
-		"The report could not be served", "the analytical database query failed"}
+		"The report could not be served", "the analytical database query failed", replayRetryable}
 )
 
 // NewReportsRouter builds the router of cmd/exceptions-reports: /healthz, GET

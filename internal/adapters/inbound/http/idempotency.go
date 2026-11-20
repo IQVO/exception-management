@@ -47,9 +47,12 @@ var (
 //     the stored answer commit or roll back together.
 //   - A 4xx answer rolls the unit of work back (a rejected request leaves no
 //     effect, and a Postgres transaction that hit a constraint is aborted
-//     anyway) and is then stored on its own, so the same key and body replay
-//     the same rejection. A 5xx answer is rolled back and NEVER stored, so
-//     the same key can retry the real work.
+//     anyway) and is then stored on its own when its problem type is FINAL
+//     (or OUTCOME), so the same key and body replay the same rejection. A
+//     RETRYABLE 4xx (optimistic-lock conflict, a fact not consumed yet) and
+//     an unclassified one are NOT stored: the key is released, exactly like
+//     the 5xx branch, and a retry executes again (ADR 0015). A 5xx answer is
+//     rolled back and NEVER stored, so the same key can retry the real work.
 //   - Two concurrent requests with one new key both run, but the store keeps
 //     the first writer's answer (ports.IdempotencyStore.Save): after saving,
 //     a request re-reads the key in its own transaction, and the one that
@@ -158,7 +161,24 @@ type capture struct {
 	header http.Header
 	code   int
 	body   bytes.Buffer
+	// replay is the class of the problem the handler answered with
+	// (markReplay, called by writeProblem); "" when the handler wrote a
+	// status by hand. The class decides whether a refusal is stored.
+	replay replayClass
 }
+
+// replayMarker is what writeProblem tells the middleware's capturing writer:
+// the replay class of the problem it answers with. Any other writer (the
+// real client connection, a test recorder) ignores it.
+type replayMarker interface{ markReplay(replayClass) }
+
+func markReplay(w http.ResponseWriter, class replayClass) {
+	if m, ok := w.(replayMarker); ok {
+		m.markReplay(class)
+	}
+}
+
+func (c *capture) markReplay(class replayClass) { c.replay = class }
 
 func (c *capture) Header() http.Header { return c.header }
 
@@ -259,12 +279,15 @@ func sameAnswer(a, b repository.IdempotencyRecord) bool {
 }
 
 // finishRejected answers a request whose unit of work was rolled back: a 5xx
-// goes out as it is and is never stored; a 4xx is stored on its own first so
-// a retry with the same key and body replays it. If another request stored
-// an answer for the key first (it won a race this one lost with a 4xx), that
-// answer is replayed instead.
+// goes out as it is and is never stored; a 4xx whose problem type is FINAL
+// (or OUTCOME — none exists here, the unit of work was rolled back) is
+// stored on its own first so a retry with the same key and body replays it;
+// a RETRYABLE or unclassified 4xx is not stored either — the key is
+// released, exactly like the 5xx branch, so a retry executes again (ADR
+// 0015). If another request stored an answer for the key first (it won a
+// race this one lost with a storable 4xx), that answer is replayed instead.
 func (m *Idempotency) finishRejected(w http.ResponseWriter, r *http.Request, key, fp string, out *capture) {
-	if out.code >= http.StatusInternalServerError {
+	if out.code >= http.StatusInternalServerError || !out.replay.stored() {
 		flush(w, out)
 		return
 	}
