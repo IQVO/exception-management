@@ -21,7 +21,10 @@ info:
     Events are published as CloudEvents on
     `warehouse.exception-management.events` through a transactional outbox
     (see `apis/asyncapi.yaml`, ADR 0004). Every `POST` is idempotent: send an
-    `Idempotency-Key`; a replay carries `Idempotency-Replayed: true`. Lists
+    `Idempotency-Key`; a replay carries `Idempotency-Replayed: true`. A
+    refusal is replayed only when it is final for the request (ADR 0015): a
+    retryable one (404 `case-not-found`, 409 `concurrent-modification`)
+    releases the key, so a retry executes again. Lists
     are keyset-paged (`limit`, `cursor`) and answer `{items, nextCursor}`.
     Errors are RFC 7807 problem
     documents with
@@ -204,8 +207,11 @@ paths:
         Sets or changes the severity and queue of a case that is not yet
         resolved, and moves an `OPEN` case to `TRIAGED`. Requires an
         `Idempotency-Key`; replaying the same key and request returns the
-        stored response with `Idempotency-Replayed: true`. Publishes
-        `ExceptionTriaged`.
+        stored response with `Idempotency-Replayed: true` — except a
+        retryable refusal (ADR 0015): a 404 `case-not-found` (the opening
+        fact may not be consumed yet) or a 409 `concurrent-modification` is
+        not stored, the key is released and a retry executes again.
+        Publishes `ExceptionTriaged`.
       tags: [Exceptions]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -511,7 +517,15 @@ components:
         128 characters or not printable ASCII. A replay with the same key and
         the same request (method, path and body) returns the stored response
         with the header `Idempotency-Replayed: true`; the same key with a
-        different request is a 409 `idempotency-key-reused`.
+        different request is a 409 `idempotency-key-reused`. A refusal is
+        stored and replayed only when it is final for the request
+        (`invalid-*` validation, `case-already-resolved`, this key's own
+        400/409 problems; ADR 0015): a retryable refusal — 404
+        `case-not-found` (the case opens from a consumed fact that may not
+        have arrived yet) or 409 `concurrent-modification` (retry after
+        re-fetching the latest version) — is not stored; the key is
+        released, a retry under it executes again and a different request
+        under it is a new request.
       schema:
         type: string
         minLength: 1

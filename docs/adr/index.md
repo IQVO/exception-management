@@ -28,3 +28,4 @@ section.
 | [0012](/docs/adr/0012-held-stock-exception-cases) | held-stock exception cases — one case per held unit, auto-resolved on disposition | Accepted (2026-11-12) |
 | [0013](/docs/adr/0013-analytics-read-side) | the analytics read side — analytics twin topic, projector, analytical database, reports | Accepted (2026-11-14, recorded retroactively; built 2026-10-21) |
 | [0014](/docs/adr/0014-adopt-the-fleet-observability-standard) | adopt the fleet observability standard — Tier 1 telemetry in every binary, one Tier 2 counter | Accepted (2026-11-14) |
+| [0015](/docs/adr/0015-every-problem-type-has-a-replay-class) | every problem type has a replay class; a retryable refusal is not stored | Accepted (2026-11-20) |
