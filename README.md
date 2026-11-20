@@ -339,8 +339,13 @@ commit in one transaction). A retry with the same key and the same request
 `Idempotency-Replayed: true`; the same key with a different request is
 `409` `idempotency-key-reused`; a missing header is `400`
 `idempotency-key-required` (`idempotency-key-invalid` when it is over-long
-or not printable ASCII). A `4xx` answer is stored and replayed; a `5xx` is
-rolled back and never stored.
+or not printable ASCII). Every problem type has a replay class (ADR 0015):
+a FINAL refusal (validation, the permanent `405`, `case-already-resolved`,
+the key problems) is stored and replayed like a success; a RETRYABLE one
+(`404 case-not-found` — the opening fact may not be consumed yet — and
+`409 concurrent-modification`) is NOT stored: the key is released, a retry
+under the same key executes again, and a different body under the released
+key is a new request. A `5xx` is rolled back and never stored.
 
 ### Pagination
 

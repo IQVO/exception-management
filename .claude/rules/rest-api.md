@@ -23,7 +23,7 @@ There is deliberately no `POST /exceptions`: every case comes from a consumed fa
 ## Conventions
 
 - Error shape: RFC 7807 `application/problem+json`; problem types are kebab-case and listed in the OpenAPI spec.
-- Every POST/PUT requires an `Idempotency-Key` header (middleware before the handler; a replay returns the stored response).
+- Every POST/PUT requires an `Idempotency-Key` header (middleware before the handler; a replay returns the stored response). Every problem type declares a replay class (ADR 0015): FINAL answers replay from the store, RETRYABLE ones (`case-not-found`, `concurrent-modification`) are not stored — the key is released and a retry executes again; a 2xx is stored, a 5xx never is.
 - A NUL byte in a path is 404, in a body 400 `malformed-request-body` (Postgres rejects U+0000).
 - Auth: none. The fleet-wide REST+MCP bearer layer was reverted 2026-09-11; `TestNoAuthMiddlewareReintroduced` keeps it that way.
 - No handler calls a sibling context over REST or MCP.
