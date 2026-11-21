@@ -53,6 +53,9 @@ var (
 //     an unclassified one are NOT stored: the key is released, exactly like
 //     the 5xx branch, and a retry executes again (ADR 0015). A 5xx answer is
 //     rolled back and NEVER stored, so the same key can retry the real work.
+//     Before answering an unstored refusal the key is re-read: a same-key
+//     copy that waited on the case row while the original was in flight
+//     replays the original's stored answer instead (see finishRejected).
 //   - Two concurrent requests with one new key both run, but the store keeps
 //     the first writer's answer (ports.IdempotencyStore.Save): after saving,
 //     a request re-reads the key in its own transaction, and the one that
@@ -286,8 +289,32 @@ func sameAnswer(a, b repository.IdempotencyRecord) bool {
 // released, exactly like the 5xx branch, so a retry executes again (ADR
 // 0015). If another request stored an answer for the key first (it won a
 // race this one lost with a storable 4xx), that answer is replayed instead.
+//
+// An unstored refusal re-reads the key first (fleet audit 2026-11-21,
+// in-flight duplicates). The key Lookup runs before the unit of work and the
+// case row lock is taken inside the use case (the version-guarded upsert of
+// the case repository), so a same-key copy that arrived while the first copy
+// was in flight passed that Lookup, read the case at the old version, queued
+// on the row lock and matched 0 rows once the first committed its triage,
+// assignment or resolution together with its key row. The RETRYABLE refusal
+// it then reached (concurrent-modification), or a 5xx, is answered by the
+// stored answer instead: N copies are one run and N-1 replays (another body:
+// idempotency-key-reused). Re-reading here is equivalent to re-reading under
+// the lock: the refusal rolled back every write. A re-read at the start of
+// the unit of work would not do: the unit takes no lock at begin, so under
+// READ COMMITTED it runs before the original commits and finds nothing. The
+// re-read is the same Lookup as the up-front check, so it honours the same
+// replay window. A failed re-read is logged at WARN and the request's own
+// refusal goes out (the key stays released).
 func (m *Idempotency) finishRejected(w http.ResponseWriter, r *http.Request, key, fp string, out *capture) {
 	if out.code >= http.StatusInternalServerError || !out.replay.stored() {
+		stored, found, err := m.Store.Lookup(r.Context(), key)
+		if err != nil {
+			m.Logger.WarnContext(r.Context(), "idempotency: re-read before an unstored refusal failed", "error", err)
+		} else if found {
+			replay(w, r, stored, fp)
+			return
+		}
 		flush(w, out)
 		return
 	}

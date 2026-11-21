@@ -25,40 +25,51 @@ import (
 )
 
 // stagingUoW is the unit-of-work double: writes staged inside Do reach the
-// committed set only when Do returns nil.
+// committed set only when Do returns nil. Each Do carries its own staged set
+// in the context it hands fn, so concurrent requests (the in-flight
+// duplicate test sends several at once) never stage into each other's unit
+// of work.
 type stagingUoW struct {
 	mu        sync.Mutex
 	committed map[string]int
-	staged    map[string]bool
-	inDo      bool
+}
+
+type stagedKey struct{}
+
+// staged is one unit of work's set of staged writes.
+type staged struct {
+	mu   sync.Mutex
+	tags map[string]bool
 }
 
 func newStagingUoW() *stagingUoW { return &stagingUoW{committed: map[string]int{}} }
 
 func (u *stagingUoW) Do(ctx context.Context, fn func(context.Context) error) error {
-	u.mu.Lock()
-	staged := map[string]bool{}
-	u.staged, u.inDo = staged, true
-	u.mu.Unlock()
-	err := fn(ctx)
-	u.mu.Lock()
-	u.inDo, u.staged = false, nil
-	if err == nil {
-		for tag := range staged {
-			u.committed[tag]++
-		}
+	if _, ok := ctx.Value(stagedKey{}).(*staged); ok {
+		return fn(ctx) // join the outer unit of work, like postgres.UnitOfWork
 	}
-	u.mu.Unlock()
-	return err
-}
-
-func (u *stagingUoW) write(_ context.Context, tag string) error {
+	st := &staged{tags: map[string]bool{}}
+	if err := fn(context.WithValue(ctx, stagedKey{}, st)); err != nil {
+		return err
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if !u.inDo {
+	for tag := range st.tags {
+		u.committed[tag]++
+	}
+	return nil
+}
+
+func (u *stagingUoW) write(ctx context.Context, tag string) error {
+	st, ok := ctx.Value(stagedKey{}).(*staged)
+	if !ok {
 		return nil
 	}
-	u.staged[tag] = true
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.tags[tag] = true
 	return nil
 }
 
