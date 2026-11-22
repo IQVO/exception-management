@@ -243,13 +243,15 @@ func TestThePurgeRacingRequestsOnExpiredKeysKeepsThemCorrectOverPostgres(t *test
 		}
 	}
 	// One live row per key (the expired seed was replaced by the winner's
-	// answer or deleted and re-inserted — either way exactly one), the case
-	// moved exactly once, and a repeat of any key replays the stored answer.
+	// answer or deleted and re-inserted — either way exactly one), exactly
+	// one transition per round (each round is a different key; its copies
+	// are one run and two replays), and a repeat of any key replays the
+	// stored answer.
 	if got := countRows(t, s, "idempotency_keys"); got != rounds {
 		t.Fatalf("key rows = %d, want one live row per key (%d)", got, rounds)
 	}
-	if v := s.version("case-1"); v != 2 {
-		t.Fatalf("case version = %d, want 2 (one triage; the copies replayed the winner)", v)
+	if v := s.version("case-1"); v != 1+rounds {
+		t.Fatalf("case version = %d, want %d (one triage per round; the copies replayed the winner)", v, 1+rounds)
 	}
 	if _, _, hdr := s.post(path, triageCritical, "race-0"); hdr.Get("Idempotency-Replayed") != "true" {
 		t.Fatalf("a repeat of a stored key replays: %v", hdr)
