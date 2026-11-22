@@ -98,9 +98,10 @@ type inflightRig struct {
 }
 
 func newInflightRig(script ...answerFn) *inflightRig {
+	clock := &movingClock{t: inflightT0}
 	r := &inflightRig{
-		store: &blindStore{IdempotencyStore: memory.NewIdempotencyStore()},
-		clock: &movingClock{t: inflightT0}, h: &scriptedHandler{script: script}, logs: &bytes.Buffer{},
+		store: &blindStore{IdempotencyStore: memory.NewIdempotencyStoreClock(clock)},
+		clock: clock, h: &scriptedHandler{script: script}, logs: &bytes.Buffer{},
 	}
 	m := NewIdempotency(r.store, uowFn(func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }), r.clock)
 	m.Logger = slog.New(slog.NewJSONHandler(r.logs, nil))
@@ -175,28 +176,43 @@ func TestAnInFlightDuplicateThatDecidesAnUnstoredRefusalReplaysTheStoredAnswer(t
 }
 
 // fleet audit 2026-11-21: the re-read uses the SAME Lookup as the up-front
-// check, so it honours the same replay window. This store has no age bound
-// (ADR 0015, "TTL/retention: none" — an open point, not this fix), so an
-// answer exactly 24 h old and one a microsecond older both replay, through
-// the up-front Lookup AND through the re-read before an unstored refusal. A
-// re-read that applied its own window (a 24 h age check only on this path)
-// would answer the duplicate's own 409 past 24 h while the up-front Lookup
-// still replays: the two paths must not disagree.
+// check, so it honours the same replay window. Since the retention fix
+// (ADR 0015, addendum 2026-11-22) that window is repository.IdempotencyTTL:
+// an answer a microsecond short of it still replays through both paths, one
+// a microsecond past it executes through both — a re-read that applied its
+// own window (an age check only on this path) would answer the duplicate's
+// own 409 past the TTL while the up-front Lookup executes, or vice versa.
 func TestTheReReadBeforeAnUnstoredRefusalAgreesWithTheUpFrontLookupAt24Hours(t *testing.T) {
 	r := newInflightRig(triaged, refusingWith(usecases.ErrConcurrentModification))
 	if first := r.post(t, "k-win", `{"n":1}`); first.Code != http.StatusOK {
 		t.Fatalf("first = %d %s", first.Code, first.Body)
 	}
-	for _, age := range []time.Duration{24 * time.Hour, time.Microsecond} {
-		r.clock.advance(age)
-		if up := r.post(t, "k-win", `{"n":1}`); up.Code != http.StatusOK || !isReplay(up) {
-			t.Fatalf("up-front Lookup at +%v = %d replayed=%v %s, want the stored 200 replayed", r.clock.Now().Sub(inflightT0), up.Code, isReplay(up), up.Body)
-		}
-		r.store.blind = 1
-		if dup := r.post(t, "k-win", `{"n":1}`); dup.Code != http.StatusOK || !isReplay(dup) || dup.Body.String() != triagedBody {
-			t.Fatalf("re-read at +%v = %d replayed=%v %s, want the stored 200 replayed (same window as the up-front Lookup)",
-				r.clock.Now().Sub(inflightT0), dup.Code, isReplay(dup), dup.Body)
-		}
+	// A microsecond short of the window: both paths replay the stored 200.
+	r.clock.advance(repository.IdempotencyTTL - time.Microsecond)
+	if up := r.post(t, "k-win", `{"n":1}`); up.Code != http.StatusOK || !isReplay(up) {
+		t.Fatalf("up-front Lookup at %v = %d replayed=%v %s, want the stored 200 replayed",
+			r.clock.Now().Sub(inflightT0), up.Code, isReplay(up), up.Body)
+	}
+	r.store.blind = 1
+	if dup := r.post(t, "k-win", `{"n":1}`); dup.Code != http.StatusOK || !isReplay(dup) || dup.Body.String() != triagedBody {
+		t.Fatalf("re-read at %v = %d replayed=%v %s, want the stored 200 replayed (same window as the up-front Lookup)",
+			r.clock.Now().Sub(inflightT0), dup.Code, isReplay(dup), dup.Body)
+	}
+	// Two microseconds past the window: both paths execute again, so the
+	// duplicate's refusal is answered by nothing (the row is invisible to
+	// both reads) and its own 409 goes out — the same agreement, in the
+	// other direction.
+	r.clock.advance(2 * time.Microsecond)
+	r.h.script = append(r.h.script, refusingWith(usecases.ErrConcurrentModification))
+	if up := r.post(t, "k-win", `{"n":1}`); up.Code != http.StatusConflict || isReplay(up) || slugOf(up.Body.String()) != "concurrent-modification" {
+		t.Fatalf("up-front Lookup at %v = %d replayed=%v %s, want the request's own refusal: the window is over",
+			r.clock.Now().Sub(inflightT0), up.Code, isReplay(up), up.Body)
+	}
+	r.store.blind = 1
+	dup := r.post(t, "k-win", `{"n":1}`)
+	if dup.Code != http.StatusConflict || isReplay(dup) || slugOf(dup.Body.String()) != "concurrent-modification" {
+		t.Fatalf("re-read at %v = %d replayed=%v %s, want the duplicate's own refusal (the same expired window as the up-front Lookup)",
+			r.clock.Now().Sub(inflightT0), dup.Code, isReplay(dup), dup.Body)
 	}
 }
 

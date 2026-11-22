@@ -118,7 +118,7 @@ func (w *world) start() {
 	w.uc.consume.OpenOrTouch = w.uc.open
 	w.ctx = context.Background()
 	w.caseID, w.lastErr, w.errChecked, w.unchecked, w.closed = "", nil, false, nil, 0
-	mw := inboundhttp.NewIdempotency(memory.NewIdempotencyStore(), passthroughUoW{}, w.clock)
+	mw := inboundhttp.NewIdempotency(memory.NewIdempotencyStoreClock(w.clock), passthroughUoW{}, w.clock)
 	w.postgresDown.Store(false)
 	w.kafkaDown.Store(false)
 	// A 1ns verdict ttl: no cached verdict outlives a step.

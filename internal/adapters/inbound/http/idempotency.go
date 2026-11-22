@@ -41,7 +41,10 @@ var (
 //   - A key that already has a stored answer replays it (same fingerprint:
 //     method, path and SHA-256 of the body) with the response header
 //     Idempotency-Replayed: true, or is 409 idempotency-key-reused
-//     (different fingerprint). Nothing runs.
+//     (different fingerprint). Nothing runs. The store only serves answers
+//     younger than repository.IdempotencyTTL (24 h, ADR 0015's 2026-11-22
+//     amendment): past the window the key is free again and the request
+//     executes anew.
 //   - A new key runs the handler INSIDE one unit of work. A 2xx answer is
 //     saved in that same transaction, so the effects, their outbox rows and
 //     the stored answer commit or roll back together.

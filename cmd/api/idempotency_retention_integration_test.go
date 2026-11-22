@@ -4,11 +4,15 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres"
 )
 
 // The tcpostgres reference keeps the testcontainers postgres module import
@@ -83,5 +87,171 @@ func TestAnExpiredIdempotencyKeyExecutesAgainOverPostgres(t *testing.T) {
 	}
 	if v := s.version("case-1"); v != 4 {
 		t.Fatalf("version = %d after the third triage, want 4", v)
+	}
+}
+
+// seedKeyRow stores a key row that was created age ago (the store's own
+// shape, through the real Save so the refresh predicate is exercised too).
+func seedKeyRow(t *testing.T, s *classesService, key string, age time.Duration) {
+	t.Helper()
+	if _, err := s.pool.Exec(context.Background(),
+		`INSERT INTO idempotency_keys (key, fingerprint, status, content_type, body, created_at)
+		VALUES ($1, 'fp-seed', 200, 'application/json', '{}'::bytea, now() - make_interval(secs => $2))`,
+		key, age.Seconds()); err != nil {
+		t.Fatalf("seeding key %s: %v", key, err)
+	}
+}
+
+func countRows(t *testing.T, s *classesService, table string) int {
+	t.Helper()
+	var n int
+	if err := s.pool.QueryRow(context.Background(), `SELECT count(*) FROM `+table).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// TestThePurgeDeletesExpiredKeysAndKeepsLiveOnesOverPostgres: the store's
+// PurgeExpired (the worker's one statement) deletes only what the read guard
+// already ignores, oldest first, one bounded batch per call.
+func TestThePurgeDeletesExpiredKeysAndKeepsLiveOnesOverPostgres(t *testing.T) {
+	s := bootClasses(t)
+	store := postgres.NewIdempotencyStore(s.pool)
+	seedKeyRow(t, s, "expired-a", 48*time.Hour)
+	seedKeyRow(t, s, "expired-b", 25*time.Hour)
+	seedKeyRow(t, s, "live-a", time.Minute)
+	seedKeyRow(t, s, "live-b", 23*time.Hour)
+
+	if n, err := store.PurgeExpired(context.Background(), 100); err != nil || n != 2 {
+		t.Fatalf("purge = %d %v, want 2 expired rows deleted", n, err)
+	}
+	if got := countRows(t, s, "idempotency_keys"); got != 2 {
+		t.Fatalf("rows left = %d, want 2 (only the live ones)", got)
+	}
+	if n, err := store.PurgeExpired(context.Background(), 100); err != nil || n != 0 {
+		t.Fatalf("second purge = %d %v, want 0: nothing live is ever deleted", n, err)
+	}
+}
+
+// TestThePurgeDeletesAtMostOneBatchPerCallOverPostgres: one pass deletes at
+// most limit rows; the next passes finish the backlog.
+func TestThePurgeDeletesAtMostOneBatchPerCallOverPostgres(t *testing.T) {
+	s := bootClasses(t)
+	store := postgres.NewIdempotencyStore(s.pool)
+	for i := range 5 {
+		seedKeyRow(t, s, fmt.Sprintf("old-%d", i), 30*time.Hour)
+	}
+	seedKeyRow(t, s, "live", time.Minute)
+	if n, err := store.PurgeExpired(context.Background(), 2); err != nil || n != 2 {
+		t.Fatalf("first batch = %d %v, want 2", n, err)
+	}
+	if left := countRows(t, s, "idempotency_keys"); left != 4 {
+		t.Fatalf("rows after one batch of 2 = %d, want 4 (3 expired + 1 live)", left)
+	}
+	total := 2
+	for {
+		n, err := store.PurgeExpired(context.Background(), 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n == 0 {
+			break
+		}
+		total += n
+	}
+	if total != 5 || countRows(t, s, "idempotency_keys") != 1 {
+		t.Fatalf("purged %d rows, %d left, want 5 purged and only the live key", total, countRows(t, s, "idempotency_keys"))
+	}
+}
+
+// TestThePurgeSkipsARowARequestHoldsAndNeverWaitsForItOverPostgres: a
+// transaction holds an expired key's row — what a request does between its
+// Save (the ON CONFLICT refresh takes the row lock) and its commit. The
+// purge must skip the locked row (FOR UPDATE SKIP LOCKED), delete nothing,
+// never block on it; after the commit the refreshed row is live and stays.
+func TestThePurgeSkipsARowARequestHoldsAndNeverWaitsForItOverPostgres(t *testing.T) {
+	s := bootClasses(t)
+	store := postgres.NewIdempotencyStore(s.pool)
+	seedKeyRow(t, s, "held", 30*time.Hour)
+
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// What the store does inside the unit of work: refresh the (expired)
+	// row; the row lock lives until the commit.
+	if _, err := tx.Exec(ctx, `INSERT INTO idempotency_keys (key, fingerprint, status, content_type, body, created_at)
+		VALUES ('held', 'fp2', 200, 'application/json', '{}'::bytea, now())
+		ON CONFLICT (key) DO UPDATE SET fingerprint = 'fp2', created_at = EXCLUDED.created_at
+		WHERE idempotency_keys.created_at <= now() - make_interval(secs => $1)`,
+		24*3600.0); err != nil {
+		t.Fatal(err)
+	}
+
+	purgeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if n, err := store.PurgeExpired(purgeCtx, 100); err != nil || n != 0 {
+		t.Fatalf("purge while a request holds the row = %d %v, want 0 deleted and no wait", n, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := store.PurgeExpired(ctx, 100); err != nil || n != 0 {
+		t.Fatalf("purge after the request committed = %d %v: the row was refreshed, it is live", n, err)
+	}
+	if got := countKey(t, s.pool, "held"); got != 1 {
+		t.Fatalf("key rows = %d, want the refreshed row", got)
+	}
+}
+
+// TestThePurgeRacingRequestsOnExpiredKeysKeepsThemCorrectOverPostgres: the
+// real router on keys whose rows have expired, while the purge runs at the
+// same time. Every request is a FRESH one (an expired row never replays),
+// N copies of one key are one run and N-1 replays of the winner, and exactly
+// one live row per key is left behind.
+func TestThePurgeRacingRequestsOnExpiredKeysKeepsThemCorrectOverPostgres(t *testing.T) {
+	s := bootClasses(t)
+	store := postgres.NewIdempotencyStore(s.pool)
+	const path = "/exceptions/case-1/triage-decisions"
+
+	const rounds = 10
+	for i := range rounds {
+		key := fmt.Sprintf("race-%d", i)
+		seedKeyRow(t, s, key, 30*time.Hour)
+		var wg sync.WaitGroup
+		codes := make([]int, 3)
+		for j := range codes {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				status, _, _ := s.post(path, triageCritical, key)
+				codes[j] = status
+			}()
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = store.PurgeExpired(context.Background(), 100)
+		}()
+		wg.Wait()
+		for _, c := range codes {
+			if c != http.StatusOK {
+				t.Fatalf("round %d: a request racing the purge answered %d, want 200", i, c)
+			}
+		}
+	}
+	// One live row per key (the expired seed was replaced by the winner's
+	// answer or deleted and re-inserted — either way exactly one), the case
+	// moved exactly once, and a repeat of any key replays the stored answer.
+	if got := countRows(t, s, "idempotency_keys"); got != rounds {
+		t.Fatalf("key rows = %d, want one live row per key (%d)", got, rounds)
+	}
+	if v := s.version("case-1"); v != 2 {
+		t.Fatalf("case version = %d, want 2 (one triage; the copies replayed the winner)", v)
+	}
+	if _, _, hdr := s.post(path, triageCritical, "race-0"); hdr.Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("a repeat of a stored key replays: %v", hdr)
 	}
 }
