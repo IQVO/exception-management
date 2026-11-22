@@ -117,6 +117,30 @@ type Clock interface {
 	Now() time.Time
 }
 
+// CaseMetrics records the business outcome of every consumed fact the
+// open-or-touch decision handles: the Tier 2 counter of the fleet metrics
+// convention (ADR 0014). OpenOrTouchException calls it exactly once per
+// Execute, after the decision and its writes returned; a use case built
+// without one records nothing. The adapter (internal/adapters/outbound/
+// telemetry) maps the call to the exception.cases.opened counter; it is never
+// called from the domain.
+//
+// A decision taken inside an enclosing unit of work that later fails to
+// commit has already been counted, and its redelivery is counted again: the
+// counter measures decisions, not durable commits.
+type CaseMetrics interface {
+	// CaseOpened counts a fact that opened a new case of the given severity.
+	CaseOpened(ctx context.Context, severity string)
+	// CaseTouched counts a fact that touched an existing case (occurrence+1).
+	CaseTouched(ctx context.Context, severity string)
+	// CaseReplayed counts the replay of a case's opening event: the
+	// idempotent no-op.
+	CaseReplayed(ctx context.Context, severity string)
+	// CaseRejected counts a fact that opened or touched nothing, with the
+	// problem slug of the failure as the reason.
+	CaseRejected(ctx context.Context, reason string)
+}
+
 // UnitOfWork runs fn as ONE atomic unit: every port call fn makes with the
 // ctx it is handed commits together when fn returns nil, or rolls back
 // together when fn returns an error (or panics). Use cases tolerate a NIL

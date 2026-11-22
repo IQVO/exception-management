@@ -31,7 +31,7 @@ flowchart TB
     RELAY["Outbox relay\n(kafka-go writer)"]
     DLQ["DLQ writer\n(<topic>.dlq)"]
   end
-  KAFKA["Kafka\n(6 consumed topics +\nwarehouse.exception-management.events)"]
+  KAFKA["Kafka\n(10 consumed topics +\nwarehouse.exception-management.events)"]
 
   REST --> UC
   KAFKA_IN --> UC
@@ -60,7 +60,7 @@ Two, in separate domain packages ([ADR 0002](/docs/adr/0002-aggregates-and-polic
 
 ## Flow of a fact
 
-1. A consumer on one of the ten pinned consumer groups reads a CloudEvent, dedupes on the
+1. A consumer on one of the eleven pinned consumer groups reads a CloudEvent, dedupes on the
    CloudEvents `id` in the same transaction as the effect, and commits the offset only after
    success ([ADR 0003](/docs/adr/0003-local-copies-and-consumed-contracts)).
 2. An unknown fact type for a declared source opens a case; a repeat **touches** it.

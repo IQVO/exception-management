@@ -29,7 +29,8 @@ anomaly itself; it makes sure no anomaly is invisible, unowned or unmeasured.
 
 ## Where it sits
 
-It consumes fifteen case sources across nine sibling topics plus one correlation fact, and publishes
+It consumes seventeen case sources across nine sibling topics, two held-stock closing facts and one correlation fact
+(`OrderRepromised`), and publishes
 its own case lifecycle on `warehouse.exception-management.events`:
 
 ```mermaid
@@ -40,6 +41,10 @@ flowchart LR
     NF["network-fulfillment"]
     INV["inventory-storage"]
     RET["returns-processing"]
+    IR["inbound-receiving"]
+    YM["yard-management"]
+    DS["dock-scheduling"]
+    OS["outbound-shipping"]
     OM["order-management"]
   end
   EM["exception-management\n(Problem Solve)"]
@@ -49,6 +54,10 @@ flowchart LR
   NF --> EM
   INV --> EM
   RET --> EM
+  IR --> EM
+  YM --> EM
+  DS --> EM
+  OS --> EM
   OM -- "correlation only" --> EM
   EM -- "read-only MCP" --> OA
 ```

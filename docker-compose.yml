@@ -4,7 +4,7 @@
 # testcontainers integration suite (`make integration`); this file exists
 # for local runs and documents the fleet broker address as env only.
 #
-# The service reads (cmd wiring, a later step):
+# The service reads (cmd/api/config.go):
 #   DATABASE_URL           the pooler-facing DSN (PgBouncer in the cluster)
 #   MIGRATIONS_DATABASE_URL  direct session DSN for DDL; falls back to
 #                            DATABASE_URL (unit-tested in

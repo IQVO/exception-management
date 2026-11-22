@@ -6,12 +6,16 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/riandyrn/otelchi"
+	otelchimetric "github.com/riandyrn/otelchi/metric"
 
+	"github.com/claudioed/exception-management/internal/adapters/inbound/requestlog"
 	"github.com/claudioed/exception-management/internal/analytics/report"
 )
 
 // ReportsServer is the inbound HTTP adapter of cmd/exceptions-reports: the
-// read-only analytics reports of ADR 0006. It depends only on the
+// read-only analytics reports of ADR 0013. It depends only on the
 // report.Reader port over the analytical database; it never touches the OLTP
 // use cases, and it writes nothing.
 type ReportsServer struct {
@@ -19,6 +23,12 @@ type ReportsServer struct {
 	// Now is the clock the default range ends at and the freshness lag is
 	// measured against (time.Now when nil).
 	Now func() time.Time
+	// Logger and ServiceName are the router's observability wiring, as on
+	// Server: the access-log logger (slog.Default when nil) and the name
+	// labelling the span and request-duration histogram
+	// (DefaultReportsServiceName when empty).
+	Logger      *slog.Logger
+	ServiceName string
 }
 
 // The wire shapes (snake_case like the other fleet reports); the report
@@ -69,20 +79,27 @@ type sourceTypeRowDTO struct {
 	EscalationRate float64 `json:"escalation_rate"`
 }
 
-// Problems of the reports binary.
+// Problems of the reports binary. Its router serves GETs only (no keyed
+// route); the classes are declared anyway (ADR 0015).
 var (
 	invalidReportRange = problem{http.StatusBadRequest, "invalid-report-range",
-		"from and to must form a valid RFC 3339 range of at most 366 days", ""}
+		"from and to must form a valid RFC 3339 range of at most 366 days", "", replayFinal}
 	reportStoreError = problem{http.StatusInternalServerError, "report-store-error",
-		"The report could not be served", "the analytical database query failed"}
+		"The report could not be served", "the analytical database query failed", replayRetryable}
 )
 
 // NewReportsRouter builds the router of cmd/exceptions-reports: /healthz, GET
 // /reports/root-cause-frequency, GET /reports/mean-time-to-resolve, GET
 // /reports/sla-breach-rate and GET /reports/freshness. No auth middleware
-// (fleet rule), no CORS: the service is cluster-internal.
+// (fleet rule), no CORS: the service is cluster-internal. The middleware
+// order is the fleet observability standard, identical to NewRouter's.
 func NewReportsRouter(s *ReportsServer) http.Handler {
 	r := chi.NewRouter()
+	name := serviceNameOr(s.ServiceName, DefaultReportsServiceName)
+	r.Use(middleware.RequestID)
+	r.Use(otelchi.Middleware(name, otelchi.WithChiRoutes(r)))
+	r.Use(otelchimetric.NewServerRequestDuration(otelchimetric.NewBaseConfig(name)))
+	r.Use(requestlog.RequestLogger(s.Logger))
 	r.Use(recoverPanic)
 	r.Get("/healthz", handleHealthz)
 	r.Get("/reports/root-cause-frequency", s.handleRootCauseFrequency)

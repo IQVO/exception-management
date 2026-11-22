@@ -19,6 +19,10 @@ flowchart LR
     NF["network-fulfillment\nAcknowledgementDeadlineAtRisk ·\nOrphanedHoldCancelled"]
     IS["inventory-storage\nDiscrepancyDetected ·\nItemUnlocated ·\nStockHeld/StockReleased/\nStockDispositioned (ADR 0012)"]
     RP["returns-processing\nUnexpectedReturnReceived"]
+    IR["inbound-receiving\nCartonDiscrepancyRaised"]
+    YM["yard-management\nVisitRejected · SealExceptionRaised ·\nTrailerDwellExceeded · YardCheckClosed"]
+    DS["dock-scheduling\nDockAppointmentNoShow"]
+    OS["outbound-shipping\nPackageMissedLoad"]
   end
   OM["order-management\nOrderRepromised (correlation only)"]
   EM["exception-management"]
@@ -30,8 +34,13 @@ flowchart LR
   NF --> EM
   IS --> EM
   RP --> EM
+  IR --> EM
+  YM --> EM
+  DS --> EM
+  OS --> EM
   OM -.->|auto-resolve window| EM
-  EM -->|"warehouse.exception-management.events"| CONS["future consumers /\nanalytics projector (roadmap)"]
+  EM -->|"warehouse.exception-management.events"| CONS["future consumers (none evidenced)"]
+  EM -->|"warehouse.exception-management.analytics"| PRJ["cmd/exceptions-projector\n(analytical DB writer)"]
   EM -.->|"get_sla_report etc."| OA
   WD -.-> EM
 ```
@@ -60,8 +69,9 @@ producers' `origin/develop` before consuming (the pinned table is the
 ## Downstream (lifecycle published)
 
 `warehouse.exception-management.events` carries the case lifecycle
-([catalogue](/docs/api-reference/events)). Today the topic's consumers are analytics-inclined
-future work — the **analytics projector is roadmap, not built** — but the contract is stable and
+([catalogue](/docs/api-reference/events)). No consumer of this topic is evidenced today (the analytics
+projector reads the separate `warehouse.exception-management.analytics` topic, see
+[Observability](/docs/operations/observability#analytics-projector-and-reports)), but the contract is stable and
 versioned: a `TeamPerformance`-style context or a warehouse console queue view can subscribe
 without this service changing.
 

@@ -96,3 +96,12 @@ and writes nothing.
   correlation stay excluded from v1.
 - Six consumer groups' worth of lag is the cost of keeping this service
   independent of its producers' availability.
+
+## Addendum 2026-11-13: current state
+
+The ten consumed types, the six group variables and "six consumer groups" above are the original set. At `origin/develop`, `apis/asyncapi.yaml` declares 20 consumed types (17 case sources, 2 held-stock closing facts, `OrderRepromised` for correlation), read by eleven consumers each under its own pinned group (`cmd/api/inbound.go`, `buildConsumers`; `consumerGroupEnvs` in `cmd/api/config.go`). ADR 0006 added `CartonDiscrepancyRaised`, ADR 0010 the yard-management and dock-scheduling types, ADR 0011 `PackageMissedLoad`, ADR 0012 `StockHeld`, `StockReleased` and `StockDispositioned` under a second group on the inventory topic.
+The rows marked "pending the producer's promotion PR" or "producer ships in wave 3" are no longer pending: the producers publish those types on their integration topics (fulfillment-execution `apis/asyncapi.yaml:58,70-71`; inventory-storage `apis/asyncapi.yaml:170-172,205-206`; returns-processing `apis/asyncapi.yaml:112`).
+
+## Addendum 2026-11-15: the dedup subject of TaskCPTMissed is order_ref, not the task id
+
+The first row of the consumed-contracts table says the `TaskCPTMissed` dedup key subject is the **task id**. That sentence is wrong about the shipped behaviour and is superseded here; the table above is left as written. The consumer keys on the payload's `order_ref`, the WES work unit id `{order_id}-line-{line_no}` (`internal/adapters/inbound/kafka/fulfillment_consumer.go`, `taskCPTMissedData` and the `fact(e, d.OrderRef, "")` call in `FulfillmentHandlers`). `task_id`, `task_type` and `cpt` stay in the frozen source payload only. The dedup key is therefore (source type, work unit ref, empty site): one open case per work unit, and every re-fire of the sweep for any task of that work unit touches it. This is the only reading under which the auto-resolve correlation can work: it reverses the case's source `order_ref` and matches the `OrderRepromised` `order_id`, which a task-id subject could never match. The row's other half (`order_ref` feeds the correlation) was already right. This repository's `docs/docs/ddd/domain-events.md` states the work unit as the subject; warehouse-docs' copy of the table still says task id.

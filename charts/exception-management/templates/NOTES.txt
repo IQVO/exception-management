@@ -35,7 +35,7 @@ MCP server (read-only, no auth): {{ include "exception-management.mcpFullname" .
 {{- end }}
 {{- if .Values.analytics.enabled }}
 
-Analytics read side (ADR 0006, projector + reports):
+Analytics read side (ADR 0013, projector + reports):
   projector {{ include "exception-management.analyticsProjectorFullname" . }} (no Service; /healthz and /readyz on :{{ .Values.analytics.projector.adminPort }})
     group {{ .Values.analytics.consumerGroup }} <- warehouse.exception-management.analytics
   reports   {{ include "exception-management.analyticsReportsFullname" . }}:{{ .Values.analytics.reports.service.port }}

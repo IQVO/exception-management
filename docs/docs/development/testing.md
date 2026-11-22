@@ -54,8 +54,21 @@ the service consumes or publishes**. The consumed and published types are in
 
 ## Acceptance (BDD) and architecture fitness
 
-- `make bdd` — godog/Gherkin acceptance over `features/`, the operator-visible lifecycle
-  (open from a fact, touch, triage, assign, resolve, auto-resolve, escalation).
+- `make bdd` — godog/Gherkin acceptance over `features/` (`Strict: true`): 16 feature files, 136
+  `Scenario`/`Scenario Outline` definitions (`git grep -c -E "^[[:space:]]*Scenario" -- features`),
+  195 executed scenarios with the Outline rows expanded and 1682 steps
+  (`go test ./features -run TestFeatures -count=1 -v`). The operator-visible lifecycle (open from a
+  fact, touch, triage, assign, resolve, auto-resolve, escalation) is in `exceptions`, `lifecycle`,
+  `sla`, `autoresolve`, `consumers`, `rest_edge`, `carton_discrepancy`, `held_stock` and
+  `yard_exceptions`. Seven `*_rules.feature` files pin the rules the documentation states, one rule per
+  scenario title: `intake_rules` (each part of the dedup key opens its own case, a touch never moves the
+  frozen payload or the SLA clock), `lifecycle_rules` (resolved cases refuse every command with
+  `409 case-already-resolved`, field bounds, `Idempotency-Key`), `sla_rules` (breach at the deadline,
+  escalation is a flag), `correlation_rules` (order-level match, inclusive window edge from the last
+  occurrence), `policy_rules` (severities, SLA and queue bounds, auto-resolve rules, append-only
+  versions, strict bodies), `read_rules` (filters, limits, keyset paging) and `readiness_rules`
+  (`/readyz` names the failing dependency, drain gate). Their steps are in `steps_rules_test.go`; the
+  harness router is wired with the same `Readiness` gate as `cmd/api`.
 - `make arch-test` — the hexagonal fitness suite in `internal/architecture`: the domain imports
   nothing internal but the domain, adapters never import each other, only `cmd/` wires, no
   shipped binary imports the in-memory outbound adapter, and **no auth middleware**

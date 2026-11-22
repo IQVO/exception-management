@@ -81,6 +81,18 @@ func (c *Case) Resolve(code, rootCause, note string, actor shared.Actor, at time
 	if !shared.ValidText(rootCause) {
 		return ErrBlankRootCause
 	}
+	// The contract (apis/openapi.yaml) makes both "a code, not prose":
+	// ^[A-Z0-9_]+$. The REST adapter already refuses anything else; the
+	// aggregate holds the same line for every caller. Only a MANUAL
+	// resolution is checked: AutoResolve records the policy's own code and
+	// the correlated CloudEvents type as the root cause, which is a full
+	// type name by design.
+	if !shared.ValidCode(code) {
+		return ErrInvalidResolutionCode
+	}
+	if !shared.ValidCode(rootCause) {
+		return ErrInvalidRootCause
+	}
 	if err := validCommand(actor, at); err != nil {
 		return err
 	}

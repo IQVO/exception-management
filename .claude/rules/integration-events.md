@@ -96,10 +96,13 @@ standard page). Record this repo's own envelope decisions as ADRs under
 | `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed` | `warehouse.yard-management.events` | yard-management | pinned consumer-first (ADR 0010); one case per discrepancy |
 | `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | `warehouse.dock-scheduling.events` | dock-scheduling | pinned consumer-first (ADR 0010) |
 | `com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad` | `warehouse.outbound-shipping.events` | outbound-shipping | yes (ADR 0011) |
+| `com.warehouse.wms.inventory-storage.stock.StockHeld` | `warehouse.inventory.events` | inventory-storage | yes (ADR 0012) |
+| `com.warehouse.wms.inventory-storage.stock.StockReleased` | `warehouse.inventory.events` | inventory-storage | yes (ADR 0012) |
+| `com.warehouse.wms.inventory-storage.stock.StockDispositioned` | `warehouse.inventory.events` | inventory-storage | yes (ADR 0012) |
 
 Planned, not built (analytics-topic only today): workforce-management `PathUnderstaffed`, network-inventory-planning `TransferStuckDetected`.
 
-Consumer groups (env, no default, boot error when unset): `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`, `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `ORDER_CORRELATION_CONSUMER_GROUP`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`, `RETURNS_EXCEPTIONS_CONSUMER_GROUP`, `CARTON_DISCREPANCY_CONSUMER_GROUP`, `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP`, `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP`, `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`.
+Consumer groups (env, no default, boot error when unset): `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`, `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`, `ORDER_CORRELATION_CONSUMER_GROUP`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`, `RETURNS_EXCEPTIONS_CONSUMER_GROUP`, `CARTON_DISCREPANCY_CONSUMER_GROUP`, `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP`, `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP`, `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`, `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP`.
 
 ## Consumer group id
 

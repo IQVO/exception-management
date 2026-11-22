@@ -68,7 +68,18 @@ kongPlugins:
 frontend:
   enabled: true
 
-# The analytics components (ADR 0006) on too: api + mcp + frontend +
+# The observability standard (ADR 0014) with every value set explicitly, so a
+# template that renders the env alone but collides with another is caught by
+# `helm lint`: ENVIRONMENT, SERVICE_VERSION, OTEL_EXPORTER_OTLP_ENDPOINT and
+# OTEL_SERVICE_NAME on every component that runs a binary.
+environment: "staging"
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  serviceName: "exception-management"
+  serviceVersion: "1.2.3"
+
+# The analytics components (ADR 0013) on too: api + mcp + frontend +
 # projector + reports, so a template that renders alone but collides with
 # another is caught by `helm lint`.
 analytics:

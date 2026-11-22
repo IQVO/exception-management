@@ -32,9 +32,10 @@ A breaking payload change gets a new `.v2` type and dataschema; an existing one 
 ## Published
 
 Topic `warehouse.exception-management.events`, written by the outbox relay only
-([ADR 0005](/docs/adr/0005-outbox-relay-attempt-cap-and-dlq)). An analytics mirror topic
-(`warehouse.exception-management.analytics`) is declared **roadmap, not built** — the projector
-does not exist yet and no consumer is wired.
+([ADR 0005](/docs/adr/0005-outbox-relay-attempt-cap-and-dlq)). The analytics mirror topic
+(`warehouse.exception-management.analytics`, ADR 0004 and ADR 0013) is consumed by this repository's own
+`cmd/exceptions-projector` (seven types, see [Observability](/docs/operations/observability#analytics-projector-and-reports));
+no other consumer of it is evidenced.
 
 | Type suffix | Raised | Payload (`data`) |
 | --- | --- | --- |
@@ -53,8 +54,8 @@ is visible on the case, not on the wire. Outbox rows the encoder refuses, or tha
 
 ## Consumed
 
-Fifteen case sources, two held-stock closing facts and one correlation fact, each under its pinned
-consumer group. Dispatch is on
+Seventeen case sources, two held-stock closing facts and one correlation fact (twenty types), read by
+eleven consumers, each under its pinned consumer group. Dispatch is on
 the FULL type; every other type on those topics is ignored (commit past).
 
 | Type | Topic | Consumer group env |

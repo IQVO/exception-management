@@ -156,6 +156,8 @@ binary_env() {
     case "$f" in *_test.go) continue ;; esac
     grep -hoE '[Gg]etenv\("[A-Z][A-Z0-9_]*"' "$f" || true
     grep -hoE '"[A-Z0-9_]+_CONSUMER_GROUP"' "$f" || true
+    # The observability names cmd/api/telemetry.go reads through its lookup func.
+    grep -hoE '"(OTEL_[A-Z_]+|SERVICE_VERSION)"' "$f" || true
   done | sed -E 's/.*"([A-Z0-9_]+)".*/\1/' | sort -u
 }
 # Word splitting is safe: the names are [A-Z0-9_] only (bash 3.2 has no mapfile).
@@ -227,6 +229,8 @@ cmd_env() { # cmd_env <dir>...
     for f in "$repo_dir/cmd/$d"/*.go; do
       case "$f" in *_test.go) continue ;; esac
       grep -hoE '(os\.Getenv|getenv)\("[A-Z][A-Z0-9_]*"' "$f" || true
+      # cmd/<dir>/telemetry.go reads the observability names through a lookup func.
+      case "$f" in */telemetry.go) grep -hoE '"(OTEL_[A-Z_]+|SERVICE_VERSION)"' "$f" || true ;; esac
     done
   done | sed -E 's/.*"([A-Z0-9_]+)".*/\1/' | sort -u
 }
@@ -341,7 +345,7 @@ for component in api mcp frontend; do
   grep -q "app.kubernetes.io/component: $component\$" <<<"$all3" || fail "$component was not rendered when mcp.enabled=true and frontend.enabled=true"
 done
 
-# --- the optional analytics components (ADR 0006) ---------------------------
+# --- the optional analytics components (ADR 0013) ---------------------------
 # Off by default: the default render is the api alone.
 if grep -q 'app.kubernetes.io/component: analytics-' <<<"$default_render"; then
   fail "the analytics components must not render by default"
@@ -447,5 +451,84 @@ fi
 if grep -E 'kind: (Ingress|HTTPRoute)' <<<"$all4" | grep -q reports; then
   fail "the reports Service stays ClusterIP-only; it gets no route"
 fi
+
+# --- the fleet observability standard (ADR 0014) ----------------------------
+# Every component that runs a binary renders ENVIRONMENT, SERVICE_VERSION,
+# OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME (the api has no suffix, the
+# others append -mcp / -a2a / -projector / -reports). The cmd/*/telemetry.go
+# names are already covered by assert_renders_env / the api scan above.
+otel_suffix() { # otel_suffix <template>
+  case "$1" in
+    deployment.yaml) echo "" ;;
+    mcp-deployment.yaml) echo "-mcp" ;;
+    a2a-deployment.yaml) echo "-a2a" ;;
+    projector-deployment.yaml) echo "-projector" ;;
+    reports-deployment.yaml) echo "-reports" ;;
+    *) fail "no observability suffix known for $1" ;;
+  esac
+}
+otel_templates=(deployment.yaml mcp-deployment.yaml a2a-deployment.yaml projector-deployment.yaml reports-deployment.yaml)
+all_on=(--set mcp.enabled=true --set a2a.enabled=true "${analytics_args[@]}")
+for t in "${otel_templates[@]}"; do
+  suffix="$(otel_suffix "$t")"
+  full="$(render_only "$t" "${everything[@]}")"
+  [[ "$(env_value "$full" ENVIRONMENT)" == "staging" ]] || fail "$t: ENVIRONMENT is not rendered from environment"
+  [[ "$(env_value "$full" SERVICE_VERSION)" == "1.2.3" ]] || fail "$t: SERVICE_VERSION is not rendered from otel.serviceVersion"
+  [[ "$(env_value "$full" OTEL_EXPORTER_OTLP_ENDPOINT)" == "otel-collector.observability.svc.cluster.local:4317" ]] \
+    || fail "$t: OTEL_EXPORTER_OTLP_ENDPOINT is not rendered from otel.endpoint"
+  [[ "$(env_value "$full" OTEL_SERVICE_NAME)" == "exception-management$suffix" ]] \
+    || fail "$t: OTEL_SERVICE_NAME is not exception-management$suffix"
+  dups="$(grep -E '^ {12}- name: ' <<<"$full" | sort | uniq -d)"
+  [[ -z "$dups" ]] || fail "$t: duplicate env entries: $dups"
+
+  # The defaults: environment local, the version falls back to image.tag.
+  defaults="$(render_only "$t" "${base[@]}" "${all_on[@]}")"
+  [[ "$(env_value "$defaults" ENVIRONMENT)" == "local" ]] || fail "$t: ENVIRONMENT must default to local"
+  [[ "$(env_value "$defaults" SERVICE_VERSION)" == "local" ]] || fail "$t: SERVICE_VERSION must default to image.tag (local)"
+  [[ "$(env_value "$defaults" OTEL_EXPORTER_OTLP_ENDPOINT)" == "otel-collector.observability.svc.cluster.local:4317" ]] \
+    || fail "$t: OTEL_EXPORTER_OTLP_ENDPOINT must default to the in-cluster Collector"
+  [[ "$(env_value "$defaults" OTEL_SERVICE_NAME)" == "exception-management$suffix" ]] \
+    || fail "$t: OTEL_SERVICE_NAME must default to exception-management$suffix"
+
+  # SERVICE_VERSION: otel.serviceVersion > image.tag > the chart's appVersion.
+  tagged="$(render_only "$t" "${base[@]}" "${all_on[@]}" --set image.tag=2.0.1)"
+  [[ "$(env_value "$tagged" SERVICE_VERSION)" == "2.0.1" ]] || fail "$t: SERVICE_VERSION must follow image.tag"
+  untagged="$(render_only "$t" "${base[@]}" "${all_on[@]}" --set image.tag=)"
+  [[ "$(env_value "$untagged" SERVICE_VERSION)" == "0.1.0" ]] || fail "$t: SERVICE_VERSION must fall back to the chart appVersion"
+  pinned="$(render_only "$t" "${base[@]}" "${all_on[@]}" --set image.tag=2.0.1 --set otel.serviceVersion=9.9.9)"
+  [[ "$(env_value "$pinned" SERVICE_VERSION)" == "9.9.9" ]] || fail "$t: otel.serviceVersion must win over image.tag"
+
+  # otel.enabled=false: the endpoint and name are not rendered, the rest stays.
+  off="$(render_only "$t" "${base[@]}" "${all_on[@]}" --set otel.enabled=false)"
+  if grep -qE 'name: (OTEL_EXPORTER_OTLP_ENDPOINT|OTEL_SERVICE_NAME)$' <<<"$off"; then
+    fail "$t: otel.enabled=false must not render OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_SERVICE_NAME"
+  fi
+  grep -q 'name: ENVIRONMENT$' <<<"$off" || fail "$t: ENVIRONMENT must render even with otel.enabled=false"
+  grep -q 'name: SERVICE_VERSION$' <<<"$off" || fail "$t: SERVICE_VERSION must render even with otel.enabled=false"
+
+  # A per-cluster environment reaches the component.
+  prod="$(render_only "$t" "${base[@]}" "${all_on[@]}" --set environment=production)"
+  [[ "$(env_value "$prod" ENVIRONMENT)" == "production" ]] || fail "$t: environment does not reach ENVIRONMENT"
+done
+
+# extraEnv refuses the chart-owned names, on every component's list.
+for var in ENVIRONMENT SERVICE_VERSION OTEL_EXPORTER_OTLP_ENDPOINT OTEL_SERVICE_NAME; do
+  for list in extraEnv mcp.extraEnv a2a.extraEnv analytics.projector.extraEnv analytics.reports.extraEnv; do
+    expect_refusal "$var through $list" "$list sets $var, which the chart owns" "${base[@]}" \
+      --set "$list[0].name=$var" --set "$list[0].value=x"
+  done
+done
+render "${base[@]}" --set 'extraEnv[0].name=SOME_OTHER_VAR' --set 'extraEnv[0].value=x' >/dev/null \
+  || fail "an unrelated extraEnv entry must still render"
+
+# Docs vs chart: every variable a component Deployment renders (everything on)
+# is documented in the configuration page, the four observability ones included.
+config_doc="$repo_dir/docs/docs/operations/configuration.md"
+rendered_vars="$(for t in "${otel_templates[@]}"; do render_only "$t" "${everything[@]}"; done \
+  | grep -E '^ {12}- name: [A-Z]' | sed -E 's/^ +- name: //' | sort -u)"
+(( $(wc -l <<<"$rendered_vars") >= 25 )) || fail "found only $(wc -l <<<"$rendered_vars") rendered variables; the scan is looking in the wrong place"
+for var in $rendered_vars; do
+  grep -qF "\`$var\`" "$config_doc" || fail "$var is rendered by a component Deployment but not documented in docs/docs/operations/configuration.md"
+done
 
 echo "PASS: exception-management chart render assertions"

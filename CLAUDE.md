@@ -61,9 +61,10 @@ micro-frontend remote `exceptions_mfe`.
 10. **No auth layer on REST, MCP or A2A** (fleet rule): never add
     bearer/JWT/API-key middleware (`TestNoAuthMiddlewareReintroduced`).
 11. **Agents only read** (ADR 0009): every MCP tool and A2A skill is L1; the
-    A2A adapter references no write use case
+    MCP and A2A adapters and `cmd/mcp`, `cmd/a2a` reference no write seam
     (`TestEveryMCPToolDeclaresAuthority`, `TestA2ASkillsDeclareAuthority`,
-    `TestA2AAdapterReferencesNoWriteUseCase`). A write tool needs an ADR.
+    `TestAgentSurfacesAreReadOnly`, the fleet sensor in
+    `internal/architecture/agent_readonly_*`). A write tool needs an ADR.
 12. **An ADR comes first** for a new consumed source, a new published type,
     an agent write, or any auth. ADRs live in `docs/adr/`.
 

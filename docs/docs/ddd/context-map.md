@@ -15,9 +15,11 @@ flowchart TB
     NF["network-fulfillment<br/>AcknowledgementDeadlineAtRisk,<br/>OrphanedHoldCancelled"]
     OM["order-management<br/>OrderRepromised (correlation only)"]
     RP["returns-processing<br/>UnexpectedReturnReceived"]
-    IS["inventory-storage<br/>DiscrepancyDetected, ItemUnlocated"]
+    IS["inventory-storage<br/>DiscrepancyDetected, ItemUnlocated,<br/>StockHeld, StockReleased,<br/>StockDispositioned"]
     YM["yard-management<br/>VisitRejected, SealExceptionRaised,<br/>TrailerDwellExceeded, YardCheckClosed"]
     DS["dock-scheduling<br/>DockAppointmentNoShow"]
+    IR["inbound-receiving<br/>CartonDiscrepancyRaised"]
+    OS["outbound-shipping<br/>PackageMissedLoad"]
     EM["exception-management"]
     AG(["warehouse-ops-agent<br/>(read-only MCP)"])
     CON(["console + operators<br/>(REST reads)"])
@@ -30,6 +32,8 @@ flowchart TB
     IS --> EM
     YM --> EM
     DS --> EM
+    IR --> EM
+    OS --> EM
     EM --> AG
     EM --> CON
 
@@ -71,7 +75,7 @@ bodies are immutable, this table is the current truth.
 | warehouse-ops-agent | read-only MCP (`cmd/mcp`, `:8090`) | Open Host Service | Built |
 | Console / operators | REST reads (`GET /exceptions*`, `GET /exception-policies`) | Open Host Service | Built |
 | Any fleet consumer | `warehouse.exception-management.events` | Published Language (CloudEvents catalogue, ADR 0004) | Built; no known external consumer yet |
-| This service's own projector | `warehouse.exception-management.analytics` | Internal | Roadmap (declared in ADR 0004, not built) |
+| This service's own projector | `warehouse.exception-management.analytics` | Internal | Built (`cmd/exceptions-projector`, ADR 0013) |
 
 ## Planned, not built
 

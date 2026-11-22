@@ -32,6 +32,11 @@ var (
 	ErrBlankResolutionCode = errors.New("exceptioncase: a resolution needs a resolution code")
 	// ErrBlankRootCause is a blank root cause.
 	ErrBlankRootCause = errors.New("exceptioncase: a resolution needs a root cause")
+	// ErrInvalidResolutionCode is a non-blank resolution code outside the
+	// contract's ^[A-Z0-9_]+$ (apis/openapi.yaml: "a code, not prose").
+	ErrInvalidResolutionCode = errors.New("exceptioncase: the resolution code must match ^[A-Z0-9_]+$")
+	// ErrInvalidRootCause is a non-blank root cause outside ^[A-Z0-9_]+$.
+	ErrInvalidRootCause = errors.New("exceptioncase: the root cause must match ^[A-Z0-9_]+$")
 	// ErrNotBreached is an escalation attempt before the SLA deadline.
 	ErrNotBreached = errors.New("exceptioncase: the SLA clock has not breached yet")
 	// ErrBlankRuleID is a blank auto-resolve rule id.

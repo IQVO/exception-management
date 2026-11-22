@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -100,6 +101,12 @@ type world struct {
 	lastBody   []byte
 	consumeOut usecases.Outcome
 
+	// The readiness gate of /readyz (the drain gate plus the two dependency
+	// checks cmd/api wires: Postgres and the Kafka brokers); the flags let a
+	// scenario take a dependency down.
+	ready                   *inboundhttp.Readiness
+	postgresDown, kafkaDown atomic.Bool
+
 	lastErr    error
 	errChecked bool
 	unchecked  []error
@@ -112,6 +119,13 @@ func (w *world) start() {
 	w.ctx = context.Background()
 	w.caseID, w.lastErr, w.errChecked, w.unchecked, w.closed = "", nil, false, nil, 0
 	mw := inboundhttp.NewIdempotency(memory.NewIdempotencyStore(), passthroughUoW{}, w.clock)
+	w.postgresDown.Store(false)
+	w.kafkaDown.Store(false)
+	// A 1ns verdict ttl: no cached verdict outlives a step.
+	w.ready = inboundhttp.NewReadiness(time.Nanosecond, time.Second,
+		inboundhttp.Dependency{Name: "postgres", Check: func(context.Context) error { return down(&w.postgresDown) }},
+		inboundhttp.Dependency{Name: "kafka", Check: func(context.Context) error { return down(&w.kafkaDown) }},
+	)
 	w.httpSrv = httptest.NewServer(inboundhttp.NewRouter(&inboundhttp.Server{
 		List:         w.uc.list,
 		Get:          w.uc.get,
@@ -121,8 +135,17 @@ func (w *world) start() {
 		Declare:      w.uc.declare,
 		ListPolicies: w.uc.listPolicies,
 		Idempotency:  mw.Middleware,
+		Readiness:    w.ready,
 	}))
 	w.lastStatus, w.lastHeader, w.lastBody, w.consumeOut = 0, nil, nil, ""
+}
+
+// down is the failing dependency check of a scenario that took it down.
+func down(flag *atomic.Bool) error {
+	if flag.Load() {
+		return errors.New("unreachable")
+	}
+	return nil
 }
 
 // run starts one command: a failure of the previous one that no step looked
@@ -179,4 +202,5 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	registerYardSteps(sc, w)
 	registerHeldStockSteps(sc, w)
 	registerWave2Steps(sc, w)
+	registerRuleSteps(sc, w)
 }

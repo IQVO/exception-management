@@ -39,6 +39,16 @@ type inboundRuntime struct {
 	sweepDone chan struct{}
 }
 
+// newOpenOrTouch builds the open-or-touch use case every fact consumer drives,
+// with the Tier 2 case counter (ADR 0014) wired in.
+func newOpenOrTouch(cases ports.ExceptionCaseRepo, policies ports.ExceptionPolicyRepo, events ports.EventPublisher, uow ports.UnitOfWork, clock ports.Clock, logger *slog.Logger) *usecases.OpenOrTouchException {
+	return &usecases.OpenOrTouchException{
+		Cases: cases, Policies: policies, Events: events,
+		IDs: system.CaseIDs{}, Clock: clock, UnitOfWork: uow,
+		Metrics: newCaseMetrics(logger),
+	}
+}
+
 // buildConsumers wires the use cases over the Postgres adapters and the
 // eleven consumers over the pinned group ids (each id from its own
 // environment variable, never a literal — .claude/rules/integration-events.md).
@@ -48,12 +58,9 @@ func buildConsumers(cfg bootConfig, pool *pgxpool.Pool, uow ports.UnitOfWork, cl
 	events := postgres.NewOutboxPublisher(pool)
 	processed := postgres.NewProcessedEventRepo(pool)
 	consume := &usecases.ConsumeFact{
-		Processed: processed,
-		OpenOrTouch: &usecases.OpenOrTouchException{
-			Cases: cases, Policies: policies, Events: events,
-			IDs: system.CaseIDs{}, Clock: clock, UnitOfWork: uow,
-		},
-		UnitOfWork: uow,
+		Processed:   processed,
+		OpenOrTouch: newOpenOrTouch(cases, policies, events, uow, clock, logger),
+		UnitOfWork:  uow,
 	}
 	settle := &usecases.AutoResolveHeldStock{
 		Processed: processed, Cases: cases, Events: events,

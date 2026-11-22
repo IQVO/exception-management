@@ -1,12 +1,33 @@
 package http
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/riandyrn/otelchi"
+	otelchimetric "github.com/riandyrn/otelchi/metric"
 
+	"github.com/claudioed/exception-management/internal/adapters/inbound/requestlog"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 )
+
+// DefaultServiceName labels the REST router's spans and metrics when the
+// caller names none. It matches the api's OTEL_SERVICE_NAME default.
+const DefaultServiceName = "exception-management"
+
+// DefaultReportsServiceName is the same for the reports router
+// (cmd/exceptions-reports).
+const DefaultReportsServiceName = "exception-management-reports"
+
+// serviceNameOr is name, or fallback when name is empty.
+func serviceNameOr(name, fallback string) string {
+	if name != "" {
+		return name
+	}
+	return fallback
+}
 
 // systemActor is the actor a command records when the request names no
 // operator: one of the ADR 0002 actor kinds, and the pre-header behavior
@@ -44,6 +65,15 @@ type Server struct {
 	Idempotency func(http.Handler) http.Handler
 	// Readiness backs GET /readyz; nil means always ready.
 	Readiness *Readiness
+
+	// Logger writes the one access-log line per request (slog.Default when
+	// nil). cmd/api passes the process logger, whose handler stamps
+	// trace_id/span_id on a record written under the request span.
+	Logger *slog.Logger
+	// ServiceName labels the request span and the request-duration
+	// histogram (DefaultServiceName when empty); it is the process's
+	// OTEL_SERVICE_NAME.
+	ServiceName string
 }
 
 // NewRouter builds the chi router for every endpoint of apis/openapi.yaml
@@ -52,9 +82,20 @@ type Server struct {
 // 405 with the reason (there is deliberately no case-creation endpoint:
 // every case opens from a consumed fact, ADR 0001), and like every POST it
 // demands a key first and stores and replays that deterministic answer.
+//
+// The middleware order is the fleet observability standard (ADR 0014):
+// RequestID, otelchi (the server span, named after the route pattern), the
+// request-duration histogram, RequestLogger (runs under the span, so its
+// line carries trace_id/span_id), then the panic recoverer. telemetry.Setup
+// must have run before this call: otelchimetric binds the global
+// MeterProvider when the router is constructed.
 func NewRouter(s *Server) http.Handler {
 	r := chi.NewRouter()
 
+	r.Use(middleware.RequestID)
+	r.Use(otelchi.Middleware(serviceNameOr(s.ServiceName, DefaultServiceName), otelchi.WithChiRoutes(r)))
+	r.Use(otelchimetric.NewServerRequestDuration(otelchimetric.NewBaseConfig(serviceNameOr(s.ServiceName, DefaultServiceName))))
+	r.Use(requestlog.RequestLogger(s.Logger))
 	r.Use(recoverPanic)
 	r.Use(rejectNUL)
 

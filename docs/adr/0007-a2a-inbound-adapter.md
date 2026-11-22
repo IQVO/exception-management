@@ -44,7 +44,10 @@ cases and nothing else; `cmd/a2a` builds no event sink, no unit of work and no
 outbox repository, never starts the relay and never dials Kafka. Three tests
 pin it: `TestDepsHoldNoWriteUseCase` (reflection over `Deps`),
 `TestA2AAdapterReferencesNoWriteUseCase` (the adapter's sources may name only
-the four read use cases) and `TestCardOffersNoWriteVerb`. A2A therefore never
+the four read use cases; replaced 2026-11-21 by the fleet read-only agent
+sensor `TestAgentSurfacesAreReadOnly`, `internal/architecture/agent_readonly_*`,
+which also covers `cmd/a2a`, aliases, dot imports, write methods, raw SQL and
+driver imports) and `TestCardOffersNoWriteVerb`. A2A therefore never
 publishes a fact; the "same use case + outbox" rule has nothing to apply to
 here. If a write skill is ever wanted it needs a new ADR that widens the MCP
 charter first, not an A2A-only widening.
@@ -98,7 +101,8 @@ decision is ever reversed.
 
 - `internal/adapters/inbound/a2a` depends only on the application and domain
   layers and nothing depends on it (`TestA2AAdapterDependencyRule`); it never
-  imports the SDK client (`TestA2AAdapterIsServerOnly`). **No outbound A2A
+  imports the SDK client (`TestA2AAdapterIsServerOnly`; since 2026-11-21 the
+  `a2aclient` entry of the fleet sensor's forbidden imports). **No outbound A2A
   client is added**: this context asks no sibling anything.
 - Real Postgres only: `cmd/a2a` refuses to boot without `DATABASE_URL` and
   without `A2A_AGENT_URL` (an absolute http(s) URL; the card must advertise a

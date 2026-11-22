@@ -102,3 +102,8 @@ from the producers' own contracts in `apis/asyncapi.yaml` and never imported.
 - Until a pending promotion PR merges, its types simply never arrive; the
   contract above is pinned consumer-first and fixed here in a follow-up PR if
   a producer's final contract differs.
+
+## Addendum 2026-11-13: current state
+
+The analytics mirror is built, not "a later build step": the relay writes every published fact to `warehouse.exception-management.analytics` as well (`internal/adapters/outbound/kafka/encoder.go:24-29,79`), and `cmd/exceptions-projector` consumes it (`internal/adapters/inbound/kafka/analytics_consumer.go`; the seven `*Analytics` messages and `receiveExceptionAnalytics` in `apis/asyncapi.yaml:129-130`).
+The Consumed table above is the original set of ten types. `apis/asyncapi.yaml` declares 20 consumed types today, adding those of ADR 0006, 0010, 0011 and 0012; the "pending the producer's promotion PR" rows are on the producers' integration topics (fulfillment-execution `apis/asyncapi.yaml:58,70-71`; inventory-storage `apis/asyncapi.yaml:170-172,205-206`).

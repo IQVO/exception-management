@@ -75,3 +75,10 @@ never writes to a producer; a resolution is a fact other contexts may read.
 
 - Fleet plan: `~/warehouse-systems/.hermes/plans/2026-10-20_231017-returns-processing-and-exception-management.md` (decision log, pinned contracts, waves).
 - Precedents: order-management ADR 0018 (`order_ref` work-unit formula), fulfillment-execution ADR 0025 (`SweepCPTMisses`: a sweeper reports facts), inventory-storage ADR 0013 (event-fed local copies).
+
+## Addendum 2026-11-13: current state
+
+The inbound set above is the v1 set. At `origin/develop`, `apis/asyncapi.yaml` declares 20 consumed types from ten sibling contexts, read by eleven consumers (`cmd/api/inbound.go`, `buildConsumers`): the context map and the Inbound row also include inbound-receiving, yard-management, dock-scheduling and outbound-shipping, and inventory-storage's held-stock facts (ADR 0006, 0010, 0011, 0012).
+The four "after the producer promotions" types are on the producers' integration topics (fulfillment-execution `apis/asyncapi.yaml:58,70-71`; inventory-storage `apis/asyncapi.yaml:170-172,205-206`).
+The analytics copies are built: `cmd/exceptions-projector` is the projector (`internal/adapters/outbound/kafka/encoder.go:24-29`, `internal/adapters/inbound/kafka/analytics_consumer.go`).
+`PathUnderstaffed` and `TransferStuckDetected` are still not consumed (`git grep` finds no consumer under `cmd/` or `internal/`). The current picture is `docs/docs/ddd/bounded-context-canvas.md` and `context-map.md`.

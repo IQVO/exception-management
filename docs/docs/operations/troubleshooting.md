@@ -13,7 +13,7 @@ sidebar_position: 4
 | --- | --- | --- |
 | exits at boot: `DATABASE_URL is required` | the only runtime is real Postgres | set `DATABASE_URL` (chart: `database.url` or `database.existingSecret`) |
 | exits at boot: `KAFKA_BROKERS is required` | same rule for Kafka | set `KAFKA_BROKERS` (chart: `kafka.brokers`) |
-| exits at boot naming a `*_CONSUMER_GROUP` variable | one of the ten pinned group ids is missing (fail-closed by design) | set all ten — see [Configuration](/docs/operations/configuration); never rename one in a running environment |
+| exits at boot naming a `*_CONSUMER_GROUP` variable | one of the eleven pinned group ids is missing (fail-closed by design) | set all eleven — see [Configuration](/docs/operations/configuration); never rename one in a running environment |
 | CrashLoop with `run migrations` error | migrations could not run; behind PgBouncer the session-scoped advisory lock cannot pass | set `MIGRATIONS_DATABASE_URL` to a direct DSN |
 | helm render fails naming a value | the chart refuses a render without a database source / brokers / with a `*_MODE` env | supply the named value; there are no modes to enable |
 
@@ -32,7 +32,7 @@ sidebar_position: 4
 | --- | --- | --- |
 | fact consumed, no case, WARN `no policy declared for the source type` | the source type has no declared `ExceptionPolicy` — the most common gap; the fact is committed past, not dead-lettered | `PUT /exception-policies/{sourceType}` with severity/queue/slaMinutes; re-fire the fact (new CloudEvents `id`) to open the case |
 | two anomalies became one case | same dedup key `(source_type, source_subject, site_id)` — by design | that *is* the design: one case per problem; `occurrence_count` says how often |
-| auto-resolve did not fire | correlated fact arrived outside `within_minutes` of `last_seen_at` (edge inclusive), or the orders do not match (correlation is order-level), or no `auto_resolve` on the policy | check the policy version the case opened under; resolve manually in doubt |
+| auto-resolve did not fire | correlated fact arrived outside `within_minutes` of `last_seen_at` (edge inclusive), or the orders do not match (correlation is order-level), or no `auto_resolve` on the policy | check the **current** policy of the case's source type (`GET /exception-policies/{sourceType}`): `AutoResolveOnCorrelation` reads the latest declared version at correlation time, not the version the case opened under, so a later version without an `auto_resolve` rule stops closing cases that are already open; resolve manually in doubt |
 | resolved case received the fact again, stayed resolved | a fact after resolution touches (occurrence + 1) and never reopens — v1 has no reopen | by design; open questions belong on a new incident |
 
 ## REST errors

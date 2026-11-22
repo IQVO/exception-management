@@ -111,14 +111,14 @@ func caseRoundTripResolved(t *testing.T, r ports.ExceptionCaseRepo) {
 	c := Opened(t, "case-1", Subject, T0)
 	must(t, c.Triage(shared.SeverityCritical, queueUrgent, mustActor(t, "op-9"), T0.Add(time.Minute)))
 	must(t, c.Assign("op-7", mustActor(t, "op-9"), T0.Add(2*time.Minute)))
-	must(t, c.Resolve("RELOCATED", "bin-mismatch", "moved by hand", mustActor(t, "op-7"), T0.Add(3*time.Minute)))
+	must(t, c.Resolve("RELOCATED", "BIN_MISMATCH", "moved by hand", mustActor(t, "op-7"), T0.Add(3*time.Minute)))
 	save(t, r, c)
 
 	got := findCase1(t, r)
 	if got.Status() != exceptioncase.StatusResolved || got.Assignee() != "op-7" || got.Queue() != queueUrgent {
 		t.Fatalf("resolved state did not round trip: %+v", got.Snapshot())
 	}
-	if got.ResolutionCode() != "RELOCATED" || got.RootCause() != "bin-mismatch" || got.Note() != "moved by hand" {
+	if got.ResolutionCode() != "RELOCATED" || got.RootCause() != "BIN_MISMATCH" || got.Note() != "moved by hand" {
 		t.Fatalf("resolution did not round trip: %+v", got.Snapshot())
 	}
 	if got.AutoResolution() != nil {
@@ -162,7 +162,7 @@ func caseOneOpenScope(t *testing.T, r ports.ExceptionCaseRepo) {
 func caseResolvedFreesKey(t *testing.T, r ports.ExceptionCaseRepo) {
 	first := Opened(t, "case-1", Subject, T0)
 	save(t, r, first)
-	must(t, first.Resolve("DONE", "handled", "", mustActor(t, "op-1"), T0.Add(time.Minute)))
+	must(t, first.Resolve("DONE", "HANDLED", "", mustActor(t, "op-1"), T0.Add(time.Minute)))
 	save(t, r, first)
 
 	// The index stops holding the key; the NEW open case becomes the owner.
@@ -222,7 +222,7 @@ func caseListOpen(t *testing.T, r ports.ExceptionCaseRepo) {
 	must(t, c2.Triage(shared.SeverityLow, queueUrgent, mustActor(t, "op-1"), T0.Add(2*time.Minute))) // queue ps-urgent, site SIM2
 	save(t, r, c2)
 	resolved := Opened(t, "case-x", "ord-9-line-1", T0.Add(3*time.Minute))
-	must(t, resolved.Resolve("DONE", "handled", "", mustActor(t, "op-1"), T0.Add(4*time.Minute)))
+	must(t, resolved.Resolve("DONE", "HANDLED", "", mustActor(t, "op-1"), T0.Add(4*time.Minute)))
 	save(t, r, resolved)
 
 	got, err := r.ListOpen(bg, "", "", "")
@@ -259,7 +259,7 @@ func caseList(t *testing.T, r ports.ExceptionCaseRepo) {
 	save(t, r, OpenedFor(t, caseCID, OtherType, Subject, "SIM2", T0.Add(2*time.Minute))) // queue ps-main, site SIM2
 	resolved := Opened(t, "case-x", "ord-9-line-1", T0.Add(3*time.Minute))
 	must(t, resolved.Triage(shared.SeverityCritical, queueUrgent, mustActor(t, "op-1"), T0.Add(3*time.Minute)))
-	must(t, resolved.Resolve("DONE", "handled", "", mustActor(t, "op-1"), T0.Add(4*time.Minute)))
+	must(t, resolved.Resolve("DONE", "HANDLED", "", mustActor(t, "op-1"), T0.Add(4*time.Minute)))
 	save(t, r, resolved)
 
 	// No status filter: every case, open AND resolved, newest first.

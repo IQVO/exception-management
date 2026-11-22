@@ -47,7 +47,10 @@ func decodeJSON(r *http.Request, dest any) error {
 }
 
 // writeError writes err as its RFC 7807 problem. An unmapped error is a 500
-// whose detail never leaks the internal message (it is logged instead).
+// whose detail never leaks the internal message (it is logged instead). The
+// replay class of the problem marks the middleware's capturing writer, so
+// the middleware knows whether the answer is remembered under its key
+// (ADR 0015).
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	p := problemFor(err)
 	if p == internalProblem {
@@ -62,8 +65,12 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	writeProblem(w, r, p, detail)
 }
 
-// writeProblem writes p with an explicit detail.
+// writeProblem writes p with an explicit detail. It is the ONE writer of an
+// error answer, so it also tells the middleware's capturing writer the
+// replay class of p (ADR 0015): the middleware then stores the answer only
+// when its class is FINAL or OUTCOME.
 func writeProblem(w http.ResponseWriter, r *http.Request, p problem, detail string) {
+	markReplay(w, p.class)
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.status)
 	_ = json.NewEncoder(w).Encode(problemDetail{

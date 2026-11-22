@@ -18,15 +18,15 @@ Feature: Operator lifecycle of an exception case
     And the case assignee is op-7
     And the published events are ExceptionOpened, ExceptionTriaged, ExceptionAssigned
 
-    When operator op-7 resolves the case with code RELOCATED and root cause bin-mismatch
+    When operator op-7 resolves the case with code RELOCATED and root cause BIN_MISMATCH
     Then the case status is RESOLVED
     And the case resolution code is RELOCATED
-    And the case root cause is bin-mismatch
+    And the case root cause is BIN_MISMATCH
     And the published events are ExceptionOpened, ExceptionTriaged, ExceptionAssigned, ExceptionResolved
     And the audit trail is OPENED, TRIAGED, ASSIGNED, RESOLVED
 
   Scenario: A resolution without a code or root cause is refused
-    When operator op-7 resolves the case with code "" and root cause bin-mismatch
+    When operator op-7 resolves the case with code "" and root cause BIN_MISMATCH
     Then the command fails with ErrBlankResolutionCode
     And the case status is OPEN
 
@@ -35,15 +35,15 @@ Feature: Operator lifecycle of an exception case
     And the case status is OPEN
 
   Scenario: Resolving twice is a 409-class terminal error
-    When operator op-7 resolves the case with code DONE and root cause handled
-    And operator op-7 resolves the case with code AGAIN and root cause handled-again
+    When operator op-7 resolves the case with code DONE and root cause HANDLED
+    And operator op-7 resolves the case with code AGAIN and root cause HANDLED_AGAIN
     Then the command fails with ErrCaseClosed
     And the case status is RESOLVED
 
   Scenario: Every transition records its actor
     When operator op-9 triages the case to severity CRITICAL queue ps-urgent
     And operator op-9 assigns the case to op-7
-    And operator op-7 resolves the case with code DONE and root cause handled
+    And operator op-7 resolves the case with code DONE and root cause HANDLED
     Then the audit entry TRIAGED records actor op-9
     And the audit entry ASSIGNED records actor op-9
     And the audit entry RESOLVED records actor op-7

@@ -1,6 +1,6 @@
 //go:build integration
 
-package main
+package http
 
 import (
 	"net/http"
@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	inboundhttp "github.com/claudioed/exception-management/internal/adapters/inbound/http"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/postgres/pgtx"
 	"github.com/claudioed/exception-management/internal/adapters/outbound/system"
+	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/testing/pgtest"
 )
 
@@ -29,7 +29,11 @@ var _ = tcpostgres.Run
 //
 //   - a mapped 4xx answered over an ABORTED transaction is still recorded and
 //     returned (here the middleware rolls the unit of work back and stores
-//     the 4xx on its own, so no SAVEPOINT is needed);
+//     the 4xx on its own, so no SAVEPOINT is needed). The refusal goes
+//     through the production error writer (WriteError), as every handler's
+//     refusal does: its replay class (case-already-resolved: FINAL, ADR
+//     0015) is what makes the answer storable — a hand-written status would
+//     be unclassified and released;
 //   - a 2xx answered over an aborted transaction is never returned nor cached.
 
 // poisonTx makes a statement fail on the server inside the middleware's
@@ -51,17 +55,17 @@ func poisonTx(t *testing.T, r *http.Request) {
 }
 
 func poisonMiddleware(pool *pgxpool.Pool, h http.Handler) http.Handler {
-	m := inboundhttp.NewIdempotency(postgres.NewIdempotencyStore(pool), postgres.NewUnitOfWork(pool), system.Clock{})
+	m := NewIdempotency(postgres.NewIdempotencyStore(pool), postgres.NewUnitOfWork(pool), system.Clock{})
 	return m.Middleware(h)
 }
 
 func keyedPost(key string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/exceptions/case-1/assignments", strings.NewReader(`{}`))
-	req.Header.Set(inboundhttp.IdempotencyKeyHeader, key)
+	req.Header.Set(IdempotencyKeyHeader, key)
 	return req
 }
 
-func countKey(t *testing.T, pool *pgxpool.Pool, key string) int {
+func poisonCountKey(t *testing.T, pool *pgxpool.Pool, key string) int {
 	t.Helper()
 	var n int
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM idempotency_keys WHERE key = $1`, key).Scan(&n); err != nil {
@@ -76,9 +80,7 @@ func TestIdempotencyAbortedTransaction409IsRecordedAndReplayed(t *testing.T) {
 	mw := poisonMiddleware(pool, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		poisonTx(t, r)
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"status":409}`))
+		writeError(w, r, exceptioncase.ErrCaseClosed)
 	}))
 
 	first := httptest.NewRecorder()
@@ -93,14 +95,14 @@ func TestIdempotencyAbortedTransaction409IsRecordedAndReplayed(t *testing.T) {
 	if status != http.StatusConflict {
 		t.Fatalf("stored status = %d", status)
 	}
-	if n := countKey(t, pool, "dup"); n != 0 {
+	if n := poisonCountKey(t, pool, "dup"); n != 0 {
 		t.Fatalf("the handler's partial write survived (%d rows)", n)
 	}
 
 	replay := httptest.NewRecorder()
 	mw.ServeHTTP(replay, keyedPost("k-poison"))
-	if replay.Code != http.StatusConflict || replay.Header().Get(inboundhttp.IdempotencyReplayedHeader) != "true" {
-		t.Fatalf("replay = %d replayed=%q, want the cached 409", replay.Code, replay.Header().Get(inboundhttp.IdempotencyReplayedHeader))
+	if replay.Code != http.StatusConflict || replay.Header().Get(IdempotencyReplayedHeader) != "true" {
+		t.Fatalf("replay = %d replayed=%q, want the cached 409", replay.Code, replay.Header().Get(IdempotencyReplayedHeader))
 	}
 	if replay.Body.String() != first.Body.String() {
 		t.Fatalf("replay body = %s, want %s", replay.Body.String(), first.Body.String())
@@ -126,7 +128,7 @@ func TestIdempotencyAbortedTransaction2xxIsNeverCached(t *testing.T) {
 	if first.Code != http.StatusInternalServerError {
 		t.Fatalf("first = %d %s, want 500 (the writes never happened)", first.Code, first.Body.String())
 	}
-	if n := countKey(t, pool, "k-lie"); n != 0 {
+	if n := poisonCountKey(t, pool, "k-lie"); n != 0 {
 		t.Fatalf("a failed success left %d idempotency rows: the key could not retry", n)
 	}
 

@@ -5,8 +5,9 @@
 The **Exception Management** bounded context of the `warehouse-systems`
 fleet — WES-tier **Supporting Subdomain**, the warehouse's "Problem Solve".
 It turns the anomaly facts other contexts already publish (missed CPTs,
-backlog breaches, at-risk acknowledgements, count discrepancies, diverted
-packages, unexpected returns) into owned cases with triage, assignment, an
+backlog breaches, at-risk acknowledgements, count and carton discrepancies,
+diverted or missed-load packages, unexpected returns, held stock, yard seal,
+dwell and yard-check exceptions, dock no-shows) into owned cases with triage, assignment, an
 SLA clock, resolution and root cause.
 
 It owns the `ExceptionCase` aggregate and the versioned `ExceptionPolicy`
@@ -153,7 +154,7 @@ Seven published event types — `ExceptionOpened`, `ExceptionTriaged`,
 (entity `exceptionpolicy`) — go through the transactional outbox to BOTH
 `warehouse.exception-management.events` (the integration topic) and
 `warehouse.exception-management.analytics` (this service's own analytics
-stream, ADR 0006), specified in `apis/asyncapi.yaml`.
+stream, ADR 0013), specified in `apis/asyncapi.yaml`.
 
 Every Kafka message on both topics is a **CloudEvents 1.0** event in
 structured content mode (ADR 0004), header
@@ -243,14 +244,17 @@ go run ./cmd/api              # migrations run automatically at startup; listens
 Card), `MIGRATIONS_DATABASE_URL`, `LOG_LEVEL`.
 `cmd/exceptions-projector`: `ANALYTICS_DATABASE_URL` (**required**),
 `KAFKA_BROKERS` (**required**), `ANALYTICS_CONSUMER_GROUP` (**required**),
-`ADMIN_ADDR` (`:8091`), `ANALYTICS_MIGRATIONS_PATH`
-(`analytics/migrations`), `LOG_LEVEL`.
+`ADMIN_ADDR` (`:8091`), `LOG_LEVEL` (the analytical migrations are embedded
+and run at boot).
 `cmd/exceptions-reports`: `ANALYTICS_DATABASE_URL` (**required**),
 `HTTP_ADDR` (`:8092`), `LOG_LEVEL`.
+Every binary also reads `OTEL_EXPORTER_OTLP_ENDPOINT` (`localhost:4317`),
+`OTEL_SERVICE_NAME` (per binary), `SERVICE_VERSION` (`dev`) and `ENVIRONMENT`
+(`local`); none is required.
 
 ### Analytics data product (exception analytics)
 
-An additive analytical read side (ADR 0006) built from this service's own
+An additive analytical read side (ADR 0013) built from this service's own
 published facts, delivered on the separate topic
 `warehouse.exception-management.analytics`, projected into a **separate**
 analytical database, and served read-only. Three processes with one writer:
@@ -274,20 +278,32 @@ curl http://localhost:8092/reports/root-cause-frequency http://localhost:8092/re
 ## Observability
 
 What exists today, and what deliberately does not (see the
-[observability page](docs/docs/operations/observability.md)):
+[observability page](docs/docs/operations/observability.md) and
+[ADR 0014](docs/adr/0014-adopt-the-fleet-observability-standard.md)):
 
+- **Telemetry** — every binary pushes traces and metrics over OTLP/gRPC to
+  `OTEL_EXPORTER_OTLP_ENDPOINT` (`localhost:4317` by default; a missing
+  Collector costs telemetry, never availability) and the Go runtime metrics.
 - **Logs** — structured JSON (`slog`) on stdout, one line per event, level
-  from `LOG_LEVEL`. The lines that matter: boot configuration problems
-  (reported all at once, each naming its variable), readiness dependency
-  failures, consumer skips (an invalid CloudEvent, or a fact for an
+  from `LOG_LEVEL`, with `trace_id`/`span_id` on lines written inside a request.
+  One request line per HTTP request. The lines that matter: boot configuration
+  problems (reported all at once, each naming its variable), readiness
+  dependency failures, consumer skips (an invalid CloudEvent, or a fact for an
   undeclared source type — that WARN is the signal of a missing policy, not
   an incident), relay DLQ writes and sweep escalations.
-- **Metrics** — `GET /metrics` (Prometheus text exposition) currently
-  carries the process presence gauge `exception_management_up`. The full
-  registry (case counters by status/queue, escalation counts, outbox depth,
-  consumer lag) is a fleet-wide instrumentation step, **roadmap, not
-  built**: no prometheus client is in the module yet.
-- **Traces — no tracing SDK is wired.**
+- **Metrics** — `http.server.request.duration` (histogram, by `http.route`) on
+  the api, reports, MCP and A2A routers, and the business counter
+  `exception.cases.opened` (`outcome` = opened / touched / replayed / rejected,
+  `exception.severity`, `reason`). `GET /metrics` is unchanged: a hand-written
+  handler that serves exactly one series, the presence gauge
+  `exception_management_up`. Case counts by status, escalation counts, outbox
+  depth and consumer lag are **not built**.
+- **Traces** — one server span per request (named after the route pattern) and
+  the A2A `a2a.skill` spans. The trace does not continue across Kafka (the
+  outbox has no headers column).
+- **Analytics** — `cmd/exceptions-projector` and `cmd/exceptions-reports`
+  are built (ADR 0013); see the
+  [observability page](docs/docs/operations/observability.md).
 - **Health endpoints** — `GET /healthz` answers `200 {"status":"ok"}`
   (liveness only); `GET /readyz` answers `200 {"status":"ready"}` or `503`
   naming the failing dependency, backed by the drain gate + a Postgres ping
@@ -323,8 +339,13 @@ commit in one transaction). A retry with the same key and the same request
 `Idempotency-Replayed: true`; the same key with a different request is
 `409` `idempotency-key-reused`; a missing header is `400`
 `idempotency-key-required` (`idempotency-key-invalid` when it is over-long
-or not printable ASCII). A `4xx` answer is stored and replayed; a `5xx` is
-rolled back and never stored.
+or not printable ASCII). Every problem type has a replay class (ADR 0015):
+a FINAL refusal (validation, the permanent `405`, `case-already-resolved`,
+the key problems) is stored and replayed like a success; a RETRYABLE one
+(`404 case-not-found` — the opening fact may not be consumed yet — and
+`409 concurrent-modification`) is NOT stored: the key is released, a retry
+under the same key executes again, and a different body under the released
+key is a new request. A `5xx` is rolled back and never stored.
 
 ### Pagination
 
@@ -354,7 +375,7 @@ helm install exception-management ./charts/exception-management \
 ```
 
 The chart refuses to render without `database.url` (or
-`database.existingSecret`), `kafka.brokers` and the ten pinned consumer
+`database.existingSecret`), `kafka.brokers` and the eleven pinned consumer
 groups (`config.*ConsumerGroup`). Optional components, all off by default:
 `mcp`, `analytics` (projector + reports), `frontend` and `a2a`. Chart
 invariants are asserted by `charts/exception-management/tests/`

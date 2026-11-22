@@ -161,8 +161,33 @@ kafka:
   brokers: ""
 
 # Extra env vars appended to the api container as a raw list. A *_MODE name
-# is refused at render time (templates/_helpers.tpl).
+# is refused at render time (templates/_helpers.tpl), and so is a name this
+# chart owns: ENVIRONMENT, SERVICE_VERSION, OTEL_EXPORTER_OTLP_ENDPOINT and
+# OTEL_SERVICE_NAME (set environment / otel.* instead).
 extraEnv: []
+
+# --- observability (docs/adr/0014, the fleet observability standard) ---
+# deployment.environment.name on every span, metric and log line the service
+# exports: ENVIRONMENT, rendered on EVERY component that runs a binary (api,
+# mcp, a2a, projector, reports). Set per cluster (local / staging / production).
+environment: "local"
+
+# OpenTelemetry traces + metrics, pushed over OTLP/gRPC to a Collector. The
+# endpoint is the in-cluster Collector Service of the warehouse-infra kind
+# cluster. Export is non-blocking, so a Collector that is down costs telemetry
+# and nothing else. otel.enabled=false stops the chart rendering
+# OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME: the binaries then fall
+# back to their built-in defaults (localhost:4317, which nothing listens on
+# in a pod), so telemetry is dropped, not disabled in code.
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  # OTEL_SERVICE_NAME of the api; every other component appends its own suffix
+  # (-mcp, -a2a, -projector, -reports).
+  serviceName: "exception-management"
+  # SERVICE_VERSION (service.version). Empty = image.tag, else the chart's
+  # appVersion (the same reference the api image is pulled by).
+  serviceVersion: ""
 
 # The Postgres dial (migrations + ping) at boot is bounded by the binary's
 # own timeouts. periodSeconds * failureThreshold of the startup probe gives
@@ -288,6 +313,12 @@ a2a:
       cpu: 100m
       memory: 128Mi
 
+# capacity step 3 (warehouse-infra ADR 0012): true (with mcp.enabled and a2a.enabled) runs cmd/mcp and cmd/a2a as
+# two containers of one <release>-agents Deployment. Off by default; warehouse-infra switches it on.
+agents:
+  colocate: false
+  strategy: {}   # {} = k8s default (RollingUpdate); {type: Recreate} only when no surge slot is free
+
 # --- frontend (Module Federation REMOTE `exceptions_mfe`) ---
 # The operator SPA remote, built from web/ and served by its own
 # nginx-unprivileged pod (component=frontend). In the kind cluster it is
@@ -331,7 +362,7 @@ frontend:
       cpu: 50m
       memory: 64Mi
 
-# --- Analytics read side (docs/adr/0006) ---
+# --- Analytics read side (docs/adr/0013) ---
 # The exception analytics data product: the projector (cmd/exceptions-projector,
 # the ONLY writer of the analytical database, consuming the analytics topic
 # warehouse.exception-management.analytics) and the read-only reports binary
@@ -386,6 +417,16 @@ analytics:
       type: ClusterIP
       port: 80
       targetPort: 8092
+    # Kong exposure of the reports API (reports-route.yaml): host path
+    # /api/exception-management/reports rewritten to /reports. Off by default;
+    # warehouse-infra turns it on with the real parentRefs and path.
+    route:
+      enabled: false
+      path: "/api/exception-management/reports"
+      parentRefs:
+        - name: ""
+          namespace: ""
+          sectionName: "http"
     # Extra env vars appended to the reports container as a raw list. A
     # *_MODE name is refused at render time (templates/_helpers.tpl).
     extraEnv: []

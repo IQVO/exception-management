@@ -99,6 +99,15 @@ app.kubernetes.io/component label; the api Service never selects it
 {{- include "exception-management.fullname" . }}-a2a
 {{- end }}
 
+{{/* agents.colocate (warehouse-infra ADR 0012): "true" iff colocate, mcp and a2a are all on; else empty. */}}
+{{- define "exception-management.agentsColocated" -}}
+{{- if and (.Values.agents | default dict).colocate .Values.mcp.enabled .Values.a2a.enabled }}true{{ end -}}
+{{- end }}
+
+{{- define "exception-management.agentsFullname" -}}
+{{- printf "%s-agents" (include "exception-management.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{/*
 Fully qualified name of the optional frontend component (the exceptions_mfe
 Module Federation remote served by nginx). It is its own workload with its
@@ -110,7 +119,7 @@ own app.kubernetes.io/component label; the api Service never selects it
 {{- end }}
 
 {{/*
-Fully qualified names of the analytics components (ADR 0006): the projector
+Fully qualified names of the analytics components (ADR 0013): the projector
 (the ONLY writer of the analytical database) and the read-only reports
 binary. Each is its own workload with its own app.kubernetes.io/component
 label; a Service never selects more than one of them
@@ -138,16 +147,16 @@ Name of the Secret holding ANALYTICS_DATABASE_URL: the operator's own
 {{- end }}
 
 {{/*
-Analytics guard (ADR 0006): the projector and reports binaries exit at boot
+Analytics guard (ADR 0013): the projector and reports binaries exit at boot
 without ANALYTICS_DATABASE_URL, and the projector without KAFKA_BROKERS
 (always required by this chart) and ANALYTICS_CONSUMER_GROUP (no default).
 Refuse them at render time, only while analytics is on, naming the value.
 */}}
 {{- define "exception-management.requireAnalyticsConfig" -}}
 {{- if not (or .Values.analytics.url .Values.analytics.existingSecret) -}}
-{{- fail "analytics.enabled is true but neither analytics.url nor analytics.existingSecret is set: the projector and reports binaries exit at boot without ANALYTICS_DATABASE_URL (ADR 0006)." -}}
+{{- fail "analytics.enabled is true but neither analytics.url nor analytics.existingSecret is set: the projector and reports binaries exit at boot without ANALYTICS_DATABASE_URL (ADR 0013)." -}}
 {{- end -}}
-{{- $_ := required "analytics.enabled is true but analytics.consumerGroup is empty: the projector exits at boot without ANALYTICS_CONSUMER_GROUP, a stable Kafka group id (ADR 0006)." .Values.analytics.consumerGroup -}}
+{{- $_ := required "analytics.enabled is true but analytics.consumerGroup is empty: the projector exits at boot without ANALYTICS_CONSUMER_GROUP, a stable Kafka group id (ADR 0013)." .Values.analytics.consumerGroup -}}
 {{- end -}}
 
 {{/*
@@ -230,6 +239,44 @@ on the api, not on the mcp component and not on the analytics components.
 {{- range .Values.analytics.reports.extraEnv -}}
 {{- if hasSuffix "_MODE" (toString .name) -}}
 {{- fail (printf "analytics.reports.extraEnv sets %s — the *_MODE variables do not exist: this service has no modes, real Postgres and real Kafka are the only runtime." .name) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The observability env every component that runs a binary renders (ADR 0014):
+ENVIRONMENT and SERVICE_VERSION always, OTEL_EXPORTER_OTLP_ENDPOINT and
+OTEL_SERVICE_NAME while otel.enabled. Call with
+(dict "root" . "suffix" "-mcp"): the suffix is appended to otel.serviceName
+(empty for the api). SERVICE_VERSION is otel.serviceVersion, else image.tag,
+else the chart's appVersion.
+*/}}
+{{- define "exception-management.otelEnv" -}}
+- name: ENVIRONMENT
+  value: {{ .root.Values.environment | quote }}
+- name: SERVICE_VERSION
+  value: {{ .root.Values.otel.serviceVersion | default .root.Values.image.tag | default .root.Chart.AppVersion | quote }}
+{{- if .root.Values.otel.enabled }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .root.Values.otel.endpoint | quote }}
+- name: OTEL_SERVICE_NAME
+  value: {{ printf "%s%s" .root.Values.otel.serviceName .suffix | quote }}
+{{- end }}
+{{- end -}}
+
+{{/*
+The four observability variables belong to the chart (environment and otel.*):
+an extraEnv entry of any component naming one would render a duplicate env
+entry that silently wins or loses depending on the order, so it is refused.
+*/}}
+{{- define "exception-management.requireNoOtelEnvOverride" -}}
+{{- $owned := list "ENVIRONMENT" "SERVICE_VERSION" "OTEL_EXPORTER_OTLP_ENDPOINT" "OTEL_SERVICE_NAME" -}}
+{{- $lists := dict "extraEnv" .Values.extraEnv "mcp.extraEnv" .Values.mcp.extraEnv "a2a.extraEnv" .Values.a2a.extraEnv "analytics.projector.extraEnv" .Values.analytics.projector.extraEnv "analytics.reports.extraEnv" .Values.analytics.reports.extraEnv -}}
+{{- range $path, $envs := $lists -}}
+{{- range $envs -}}
+{{- if has (toString .name) $owned -}}
+{{- fail (printf "%s sets %s, which the chart owns: set environment, otel.enabled, otel.endpoint, otel.serviceName or otel.serviceVersion instead." $path .name) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

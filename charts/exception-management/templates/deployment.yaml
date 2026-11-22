@@ -3,6 +3,7 @@
 {{- include "exception-management.requireConsumerGroups" . -}}
 {{- include "exception-management.requireGracePeriod" . -}}
 {{- include "exception-management.requireNoModeEnv" . -}}
+{{- include "exception-management.requireNoOtelEnvOverride" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -129,6 +130,7 @@ spec:
             {{- end }}
             - name: KAFKA_BROKERS
               value: {{ .Values.kafka.brokers | quote }}
+            {{- include "exception-management.otelEnv" (dict "root" . "suffix" "") | nindent 12 }}
             {{- range .Values.extraEnv }}
             - {{ toYaml . | nindent 14 | trim }}
             {{- end }}

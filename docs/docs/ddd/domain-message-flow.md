@@ -22,6 +22,8 @@ flowchart TB
         T6["warehouse.inventory.events"]
         T7["warehouse.yard-management.events"]
         T8["warehouse.dock-scheduling.events"]
+        T9["warehouse.inbound-receiving.events"]
+        T10["warehouse.outbound-shipping.events"]
     end
     subgraph INBOUND["internal/adapters/inbound/kafka"]
         C1["fulfillment consumer"]
@@ -32,10 +34,16 @@ flowchart TB
         C6["inventory consumer"]
         C7["yard exceptions consumer"]
         C8["dock-scheduling consumer"]
+        C9["held-stock consumer<br/>(second group on the inventory topic)"]
+        C10["carton-discrepancy consumer"]
+        C11["outbound-shipping consumer"]
     end
     subgraph APP["internal/application/usecases"]
         OT["OpenOrTouchException"]
         AR["AutoResolveOnCorrelation"]
+        OC["OpenCartonDiscrepancy"]
+        OY["OpenYardCheckDiscrepancies"]
+        HS["AutoResolveHeldStock"]
         SW["SweepSLABreaches"]
         CMD["Triage / Assign / Resolve"]
         DEC["DeclareExceptionPolicy"]
@@ -59,12 +67,18 @@ flowchart TB
     T6 --> C6 --> OT
     T7 --> C7 --> OT
     T8 --> C8 --> OT
+    T6 --> C9 --> OT
+    C9 -- "StockReleased /<br/>StockDispositioned" --> HS
+    T9 --> C10 --> OC --> OT
+    C7 -- "YardCheckClosed" --> OY --> OT
+    T10 --> C11 --> OT
     T4 --> C4 --> AR
     C1 -- "TaskCPTMissed.order_ref" --> AR
 
     OT --> CASE
     OT -- "policy of the source type" --> POL
     AR --> CASE
+    HS --> CASE
     SW --> CASE
     CMD --> CASE
     DEC --> POL
@@ -83,7 +97,7 @@ flowchart TB
 
 The flow in words:
 
-1. **A fact lands** on one of the six consumed topics; the consumer under
+1. **A fact lands** on one of the ten consumed topics; the consumer under
    its pinned group id decodes the CloudEvents envelope
    (`internal/adapters/kafka/cloudevents`) and dispatches on the FULL type;
    unknown types are ignored; a non-CloudEvent message is WARN + skip.
@@ -97,7 +111,10 @@ The flow in words:
    outbox; touch bumps occurrence and `lastSeenAt` only.
 4. **Correlation.** An `OrderRepromised` reverses the open case's source
    `order_ref` to an order id, compares (order level), checks the inclusive
-   window against `lastSeenAt`, and auto-resolves on match.
+   window against `lastSeenAt`, and auto-resolves on match. The held-stock
+   consumer does the same kind of close without a policy rule: a
+   `StockReleased`, or a `StockDispositioned` that ends the hold, resolves
+   the case of that held unit (`AutoResolveHeldStock`, ADR 0012).
 5. **Operators** triage, assign and resolve over REST behind the
    `Idempotency-Key` middleware; the ops-agent only reads (REST + MCP).
 6. **Everything leaves through the outbox**: the relay drains due rows,

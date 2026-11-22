@@ -113,7 +113,7 @@ func TestA2AAnswersFromRealPostgresAndNeverWritesTheOutbox(t *testing.T) {
 	outboxBefore := pgtest.Count(t, pool, "outbox")
 
 	srv := httptest.NewServer(newRouter(inbounda2a.Handler(inbounda2a.NewExecutor(deps)),
-		inbounda2a.Card(inbounda2a.Config{AgentURL: testAgentURL, Version: serviceVersion})))
+		inbounda2a.Card(inbounda2a.Config{AgentURL: testAgentURL, Version: serviceVersion}), quietLogger(), defaultServiceName))
 	defer srv.Close()
 	client, err := a2aclient.NewFromCard(context.Background(),
 		inbounda2a.Card(inbounda2a.Config{AgentURL: srv.URL + "/", Version: "test"}))

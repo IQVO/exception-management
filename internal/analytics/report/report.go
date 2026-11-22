@@ -1,5 +1,5 @@
 // Package report is the self-contained read-model region of the analytics
-// read side (ADR 0006): the kinds of the analytics stream, the shape of the
+// read side (ADR 0013): the kinds of the analytics stream, the shape of the
 // three reports the exceptions-reports binary serves, the query rules (date
 // range), the pure percentile/share/freshness logic, the validation of a
 // projectable event, and the writer/reader ports the analytical store

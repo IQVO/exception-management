@@ -70,3 +70,17 @@ func TestValidText(t *testing.T) {
 		}
 	}
 }
+
+// ValidCode is the contract pattern ^[A-Z0-9_]+$ of resolutionCode and rootCause.
+func TestValidCodeMatchesTheContractPattern(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]bool{
+		"": false, "A": true, "Z": true, "0": true, "9": true, "_": true, "WORK_COMPLETED": true, "A1_B2": true,
+		"a": false, "z": false, "@": false, "[": false, "/": false, ":": false, "`": false, "-": false, " ": false,
+		"A B": false, "A\n": false, "\nA": false, "A\x00": false, "É": false, "bin-mismatch": false,
+	} {
+		if got := ValidCode(in); got != want {
+			t.Errorf("ValidCode(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

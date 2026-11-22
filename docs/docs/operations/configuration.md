@@ -70,13 +70,51 @@ consumers or the sweeper.
 Like the MCP binary, the A2A agent is read-only and reads **no** Kafka variable: it never dials Kafka,
 never starts the relay, the consumers or the sweeper ([ADR 0007](/docs/adr/0007-a2a-inbound-adapter)).
 
+## `cmd/exceptions-projector`
+
+| Variable | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `ANALYTICS_DATABASE_URL` | yes | — | the analytical Postgres DSN (direct, the projector runs the embedded analytical migrations through it); the projector never opens the OLTP database |
+| `KAFKA_BROKERS` | yes | — | comma-separated broker list |
+| `ANALYTICS_CONSUMER_GROUP` | yes | — | the projector's fixed consumer group, no default in the binary |
+| `ADMIN_ADDR` | no | `:8091` | `/healthz` and `/readyz` listen address |
+| `LOG_LEVEL` | no | `info` | as above |
+
+## `cmd/exceptions-reports`
+
+| Variable | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `ANALYTICS_DATABASE_URL` | yes | — | the analytical Postgres DSN, opened through a read-only pool; the reader never opens the OLTP database or Kafka |
+| `HTTP_ADDR` | no | `:8092` | reports API listen address |
+| `LOG_LEVEL` | no | `info` | as above |
+
+## Observability variables (all five binaries)
+
+Every binary reads the same four variables; the chart renders them on every component that runs a
+binary (see [Observability](/docs/operations/observability) and
+[ADR 0014](/docs/adr/0014-adopt-the-fleet-observability-standard)). None is required: with nothing
+set the binary exports to `localhost:4317`, which drops the telemetry when no Collector listens, and
+never blocks or fails to boot.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | Collector OTLP/gRPC endpoint, `host:port` or a full URL (`https://` keeps TLS) |
+| `OTEL_SERVICE_NAME` | per binary: `exception-management` (api), `exception-management-mcp`, `exception-management-a2a`, `exception-management-projector`, `exception-management-reports` | `service.name` of every span and metric |
+| `SERVICE_VERSION` | `dev` | `service.version` |
+| `ENVIRONMENT` | `local` | `deployment.environment.name` (read by `telemetry.Setup`) |
+
 ## Helm
 
 `charts/exception-management/values.yaml` maps every key 1:1 to an env var
 (`config.outboxRelayInterval` → `OUTBOX_RELAY_INTERVAL`, `config.slaSweepInterval` →
 `SLA_SWEEP_INTERVAL`, …) and the chart refuses to render without `database.url` /
-`database.existingSecret` and `kafka.brokers`. The MCP server is a separate component, **disabled
-by default**:
+`database.existingSecret` and `kafka.brokers`. The observability variables come from
+`environment` (`ENVIRONMENT`) and `otel.*` (`otel.endpoint` → `OTEL_EXPORTER_OTLP_ENDPOINT`,
+`otel.serviceName` → `OTEL_SERVICE_NAME` with `-mcp`, `-a2a`, `-projector` or `-reports` appended per
+component, `otel.serviceVersion` → `SERVICE_VERSION`, falling back to `image.tag` and then the chart's
+`appVersion`); `otel.enabled=false` stops the chart rendering the endpoint and the service name. An
+`extraEnv` entry naming one of the four is refused at render time. The MCP server is a separate
+component, **disabled by default**:
 
 ```yaml
 mcp:

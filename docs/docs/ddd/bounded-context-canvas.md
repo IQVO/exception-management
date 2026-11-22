@@ -28,6 +28,8 @@ flowchart LR
     IS["inventory-storage"] -->|warehouse.inventory.events| EM
     YM["yard-management"] -->|warehouse.yard-management.events| EM
     DS["dock-scheduling"] -->|warehouse.dock-scheduling.events| EM
+    IR["inbound-receiving"] -->|warehouse.inbound-receiving.events| EM
+    OS["outbound-shipping"] -->|warehouse.outbound-shipping.events| EM
     OP(["Operators, console"]) -->|"REST /exceptions"| EM
     EM["exception-management"]
 ```
@@ -36,7 +38,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    EM["exception-management"] -->|warehouse.exception-management.events| ANY["Any consumer<br/>(analytics: roadmap)"]
+    EM["exception-management"] -->|warehouse.exception-management.events| ANY["Any consumer<br/>(none evidenced)"]
+    EM -->|warehouse.exception-management.analytics| PRJ["cmd/exceptions-projector<br/>(analytical DB writer)"]
     EM -->|"REST reads"| OP(["Operators, console"])
     EM -->|"MCP read-only tools"| AG(["warehouse-ops-agent"])
     EM -->|"poison rows"| DLQ["warehouse.exception-management.events.dlq"]
@@ -95,7 +98,7 @@ ops-agent work cases instead of raw events.
 | `warehouse.exception-management.events.dlq` | poison outbox rows, raw | ADR 0005 |
 | REST reads | `GET /exceptions`, `GET /exceptions/{caseId}`, `GET /exception-policies` | |
 | MCP (`cmd/mcp`, `:8090`) | `list_open_exceptions`, `get_exception`, `get_exception_policies`, `get_sla_report` | read-only for warehouse-ops-agent |
-| Roadmap | `warehouse.exception-management.analytics` mirror + projector | declared in ADR 0004, not built |
+| Built | `warehouse.exception-management.analytics` mirror, read by `cmd/exceptions-projector` into the analytical database and served by `cmd/exceptions-reports` | ADR 0004, ADR 0013 |
 
 ## Ubiquitous language
 
@@ -136,7 +139,7 @@ correlated fact, work unit ref, policy version — each defined on
 ## Verification metrics
 
 - Mutation gate over every domain package (`make mutation`, measured
-  100/100, thresholds 95/95).
+  100/100, thresholds 99/99).
 - Golden exact-JSON test per published type; `TestEventCatalogueMatchesContract`
   checks ADR 0004's catalogue against `apis/asyncapi.yaml`.
 - godog scenarios: fact → open, repeated fact → touch,
@@ -149,7 +152,7 @@ correlated fact, work unit ref, policy version — each defined on
 
 - When does the Supporting → Core flip happen? (ADR 0001's condition:
   auto-resolution policies and agent recommendations at scale.)
-- The analytics mirror (ADR 0004) and its projector: build step, consumer
-  set still zero — timing open.
+- The analytics mirror (ADR 0004) and its projector are built (ADR 0013); no consumer of the mirror
+  other than `cmd/exceptions-projector` is evidenced.
 - v2 candidates deliberately parked in ADR 0001: manual case creation,
   associate paging, labor-cost correlation.

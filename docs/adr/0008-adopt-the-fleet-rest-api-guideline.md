@@ -74,3 +74,11 @@ in its own PR. No outbound adapter of this service calls a REST list.
 - Breaking by design: new URLs, a new list envelope, a key now required on
   `POST /exceptions`. It deploys together with the REST cutover set.
 - `docs/docs/api-reference/rest` is regenerated from `apis/openapi.yaml`.
+
+---
+
+Update 2026-11-20 (ADR 0015): the "a `4xx` is stored" sentence above is
+superseded by the fleet replay-class rule — a refusal is stored only when
+its problem type is FINAL (or OUTCOME; none exists here). `case-not-found`
+and `concurrent-modification` are RETRYABLE and release the key. The
+Decision text above stands as the record of 2026-11-01.
