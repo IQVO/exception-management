@@ -285,6 +285,6 @@ func problemFromUseCase(err error) *problem {
 	if errors.Is(err, ports.ErrNotFound) {
 		return newProblem(404, "case-not-found", "Exception case not found", "exception case not found")
 	}
-	slog.Error("a2a skill failed", "error", err)
+	slog.Error("a2a skill failed", "error", logReplacer.Replace(err.Error()))
 	return newProblem(500, "internal-error", "Internal server error", "an unexpected error occurred")
 }
