@@ -64,6 +64,29 @@ relay drain (10 s) + inbound consumers drain (15 s) + consumer close (5 s) ≈ 4
   ([MCP tools](/docs/mcp/tools)).
 - **Redrive a DLQ** — see below.
 
+## Idempotency-key retention
+
+A stored `Idempotency-Key` answer lives for **24 hours**
+(`repository.IdempotencyTTL`, ADR 0015's 2026-11-22 amendment — before it,
+rows lived forever). Two mechanisms share the one constant:
+
+- **the age guard**: the store's lookup selects `created_at > now() - 24h`,
+  so an expired row can never answer a replay — a repeat of an expired key
+  EXECUTES again (and a different body under it is a new request, not a
+  `409 idempotency-key-reused`);
+- **the purge**: a background worker (started with the API, one pass at
+  boot and then hourly) deletes expired rows in batches of 500
+  (`ORDER BY created_at LIMIT n FOR UPDATE SKIP LOCKED`, the age rechecked
+  on the delete, no advisory lock). It never deletes a live row and never
+  waits on a row a request holds.
+
+Both values are fixed, not configuration: expiry is enforced at read, so
+the hourly interval only bounds how long a dead row stays on disk. A failed
+pass is logged (`idempotency purge failed`) and retried by the next tick —
+the purge only ever logs, it never fails the process. If `idempotency_keys`
+grows anyway, look for that error line; a growing table with no purge
+errors is a bug, not a backlog.
+
 ## Outbox relay
 
 Every published event is claimed from the outbox by the relay
