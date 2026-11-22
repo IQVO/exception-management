@@ -1,6 +1,6 @@
 # ADR 0015: every problem type has a replay class; a retryable refusal is not stored
 
-- Status: Accepted (2026-11-20); amended 2026-11-21 (in-flight duplicates re-read the key before an unstored refusal)
+- Status: Accepted (2026-11-20); amended 2026-11-21 (in-flight duplicates re-read the key before an unstored refusal); amended 2026-11-22 (a 24 h TTL and an hourly purge — the retention open point, order-sourcing #84 / last-mile-delivery #86)
 - Owner decision: fleet rule of 2026-11-18 (`.claude/rules/fleet/idempotency-and-outbox.md`; the standard: warehouse-harness-template `docs/idempotency-replay-classes.md`)
 - Supersedes: the "a 4xx answer is stored and replayed" sentence of ADR 0008 (its Decision text stands as the record of 2026-11-01; this ADR is the dated pointer forward)
 
@@ -80,3 +80,23 @@ Re-reading there is equivalent to re-reading under the lock: the refusal already
 The re-read is the same `Lookup` as the up-front check, so it honours the same replay window. This store has none yet (the TTL/retention open point above): an answer 24 h old and one a microsecond older both replay through either path, and `TestTheReReadBeforeAnUnstoredRefusalAgreesWithTheUpFrontLookupAt24Hours` pins that the two paths agree. When the retention fix adds an age bound to `Lookup`, both paths get it at once.
 
 Tests: `internal/adapters/inbound/http/idempotency_inflight_test.go` (replay, 5xx, other body, the 24 h agreement, the WARN), the harness template's `TestConcurrentDuplicateReplaysTheOriginalsStoredAnswer` re-rendered into `idempotency_replay_classes_test.go`, and the Postgres probe above.
+
+## Amendment (2026-11-22): a 24-hour TTL and an hourly purge — a stored answer stops living forever
+
+This resolves the open point of the store design above ("TTL/retention: none") with the fleet pattern already merged in order-sourcing (#84) and last-mile-delivery (#86). **This is a behaviour change, the bigger one of the wave: until today a stored answer replayed FOREVER; from this change a key is remembered for 24 hours.**
+
+**Decision.**
+
+- **One TTL constant**, `repository.IdempotencyTTL = 24h` (the fleet default), shared by every reader and writer of the window — the age guard, the Save refresh and the purge — so the read check, the write and the sweep can never disagree about which rows are live.
+- **Age guard on the replay read.** `Lookup` selects `created_at > now() - TTL`, so a row older than the TTL is invisible: it can never answer a replay between expiry and the sweep. Every reader of the port shares it — the up-front check, the post-save re-read and the `finishRejected` re-read (the 2026-11-21 amendment predicted this: "both paths get it at once"; `TestTheReReadBeforeAnUnstoredRefusalAgreesWithTheUpFrontLookupAt24Hours` now pins agreement in BOTH directions: inside the window both replay, past it both execute).
+- **Save refreshes an expired row.** `ON CONFLICT (key) DO UPDATE ... WHERE created_at <= now() - TTL`, with `created_at` set to the NEW answer's stamp. First-writer-wins is unchanged WITHIN the window (a live row is never overwritten; a concurrent loser still replays the winner); past it the key is free again, and the same key and body EXECUTES a second time while a different body under it becomes a NEW request instead of `409 idempotency-key-reused`.
+- **Bounded background purge.** `PurgeExpired(ctx, limit)` joins `ports.IdempotencyStore` (implemented by the Postgres store and the memory double; the port contract grew `repocontract.IdempotencyRetention`). `cmd/api` runs it at start and then hourly, in batches of 500: `ORDER BY created_at LIMIT n FOR UPDATE SKIP LOCKED`, the age test repeated on the DELETE itself, no advisory lock, and it never waits on a row a request holds — a row whose lock it cannot take is skipped. A purge that deletes an expired row just before a Save only turns the refresh into a plain INSERT; an expired row is invisible to `Lookup`, so deleting it changes nothing a request can observe. Like the SLA sweep the worker only ever logs: a failed pass is retried by the next tick.
+
+**The replay-class premise, re-examined.** The Decision table's rationale for `idempotency-key-reused` (FINAL) was "a stored answer never changes (no TTL, no purge), so the conflict never clears by retrying." The TTL removes the "no TTL, no purge" half, so the premise is re-stated: WITHIN the 24-hour window the stored answer is still immutable and the conflict still cannot clear by retrying — FINAL stands. PAST the window the row is gone and the key is free: a retry is not a "cleared conflict" but a first execution (and the 409 itself is never stored — `replay()` answers it before any storage). No other class changes: a FINAL answer is stored and replayed for 24 h (previously forever), a RETRYABLE answer is still never stored, a 5xx still releases the key.
+
+**Consequences.**
+
+- A caller must treat the key as unique per logical request for 24 hours (a UUID per submit: no practical collision). After 24 h the same key and body executes again — its effects run a second time — and the same key with a different request is no longer a 409.
+- `idempotency_keys` stops growing: the hourly purge deletes every row the read guard already ignores, oldest first, bounded per statement.
+- `apis/openapi.yaml` descriptions now state the 24-hour window (the parameter, the info block, the 409 problem); `docs/docs/api-reference/rest` regenerated.
+- Tests: the Postgres proofs in `cmd/api/idempotency_retention_integration_test.go` (an expired key executes again, the purge deletes expired keeps live, one batch per pass, a held row is skipped not waited for, requests racing the purge), the contract suite `repocontract.IdempotencyRetention` on both stores, the middleware unit tests in `internal/adapters/inbound/http/idempotency_retention_test.go`, and the worker loop tests in `cmd/api/retention_test.go`.

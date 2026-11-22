@@ -339,7 +339,12 @@ commit in one transaction). A retry with the same key and the same request
 `Idempotency-Replayed: true`; the same key with a different request is
 `409` `idempotency-key-reused`; a missing header is `400`
 `idempotency-key-required` (`idempotency-key-invalid` when it is over-long
-or not printable ASCII). Every problem type has a replay class (ADR 0015):
+or not printable ASCII). A stored answer lives for **24 hours**
+(`repository.IdempotencyTTL`, ADR 0015's 2026-11-22 amendment): an expired
+row never answers a replay (the age guard on the store's lookup), the key
+is free again, and a background purge deletes the dead rows hourly in
+batches of 500 (`FOR UPDATE SKIP LOCKED`, never blocks a request). Every
+problem type has a replay class (ADR 0015):
 a FINAL refusal (validation, the permanent `405`, `case-already-resolved`,
 the key problems) is stored and replayed like a success; a RETRYABLE one
 (`404 case-not-found` — the opening fact may not be consumed yet — and

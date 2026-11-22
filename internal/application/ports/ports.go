@@ -81,16 +81,28 @@ type ProcessedEvents interface {
 }
 
 // IdempotencyStore keeps the answers of requests made with an
-// Idempotency-Key. The first writer of a key wins: a later Save of the same
-// key changes nothing, so two concurrent requests with one key cannot both
-// record their answer. Lookup runs inside the middleware's unit of work on
-// the fresh path (the race re-read), and standalone on the replay path.
+// Idempotency-Key. The first writer of a key wins, for as long as its answer
+// is live: a row older than repository.IdempotencyTTL answers nothing (the
+// Lookup age guard), so two concurrent requests with one key cannot both
+// record their answer, and a key past its window is free again. Lookup runs
+// inside the middleware's unit of work on the fresh path (the race re-read),
+// and standalone on the replay path.
 type IdempotencyStore interface {
-	// Lookup returns the stored answer of key, or found=false when the key
-	// has none.
+	// Lookup returns the stored answer of key while it is younger than
+	// repository.IdempotencyTTL, or found=false when the key has none the
+	// replay window still honours.
 	Lookup(ctx context.Context, key string) (repository.IdempotencyRecord, bool, error)
-	// Save stores rec unless the key already has an answer.
+	// Save stores rec unless the key already has a LIVE answer (the first
+	// writer wins within the window); the answer of a key whose previous
+	// answer has expired replaces it, so the key serves the new answer.
 	Save(ctx context.Context, rec repository.IdempotencyRecord) error
+	// PurgeExpired is the retention: it deletes at most limit rows older
+	// than repository.IdempotencyTTL and returns how many it deleted; a
+	// result equal to limit means more may remain. It never deletes a live
+	// row, never waits for a row a request holds (SKIP LOCKED on Postgres),
+	// and never changes what a concurrent request answers: an expired row is
+	// already invisible to Lookup, so deleting it is not observable.
+	PurgeExpired(ctx context.Context, limit int) (int, error)
 }
 
 // EventPublisher is the write side of the transactional outbox, in domain

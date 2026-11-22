@@ -147,7 +147,9 @@ erDiagram
   — the operator listing and the SLA sweep.
 - `idx_outbox_attempts_next_attempt (attempts, next_attempt_at)` — the
   relay's claim scan (`FOR UPDATE SKIP LOCKED`, up to 100 due rows).
-- `idx_idempotency_keys_created_at` — store cleanup.
+- `idx_idempotency_keys_created_at` — the retention
+  purge's scan (`ORDER BY created_at ... FOR UPDATE SKIP LOCKED`, ADR 0015's
+  2026-11-22 amendment: a 24-hour window, then the row goes).
 
 Text keys compared or ordered in Go (case ids, dedup key parts, queues,
 assignees) use the `C` collation so `ORDER BY` follows byte order, the

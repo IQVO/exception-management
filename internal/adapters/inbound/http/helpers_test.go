@@ -56,10 +56,12 @@ func newFixture(t *testing.T) *fixture {
 func (f *fixture) router() http.Handler { return NewRouter(f.srv) }
 
 // withIdempotency wraps the command routes with the real middleware over
-// the in-memory store (the double of the Postgres wiring in cmd/api).
+// the in-memory store (the double of the Postgres wiring in cmd/api), the
+// store measured against the same clock the middleware stamps with, so the
+// 24-hour replay window advances with the test's clock.
 func (f *fixture) withIdempotency(t *testing.T) (http.Handler, *memory.IdempotencyStore) {
 	t.Helper()
-	store := memory.NewIdempotencyStore()
+	store := memory.NewIdempotencyStoreClock(memory.Clock{T: f.now})
 	f.srv.Idempotency = NewIdempotency(store, uowFn(func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }), memory.Clock{T: f.now}).Middleware
 	return NewRouter(f.srv), store
 }

@@ -77,9 +77,12 @@ func (u *stagingUoW) write(ctx context.Context, tag string) error {
 // in-memory idempotency store per call).
 func newReplayOps(t *testing.T) replayOps {
 	t.Helper()
-	store := memory.NewIdempotencyStore()
-	uow := newStagingUoW()
 	clock := memory.Clock{T: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)}
+	// The store is measured against the same fixed clock the middleware
+	// stamps with, so the answers this suite stores are live for the whole
+	// repository.IdempotencyTTL window.
+	store := memory.NewIdempotencyStoreClock(clock)
+	uow := newStagingUoW()
 	idem := httpadapter.NewIdempotency(store, uow, clock)
 	errs := map[string]error{}
 	for _, row := range httpadapter.Catalogue() {

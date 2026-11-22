@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/claudioed/exception-management/internal/application/ports"
-	"github.com/claudioed/exception-management/internal/application/repository"
 	"github.com/claudioed/exception-management/internal/application/usecases"
 	"github.com/claudioed/exception-management/internal/domain/exceptioncase"
 	"github.com/claudioed/exception-management/internal/domain/exceptionpolicy"
@@ -180,37 +179,6 @@ func (r *Policies) Get(_ context.Context, sourceType string) (*exceptionpolicy.P
 		return p, nil
 	}
 	return nil, ports.ErrNotFound
-}
-
-// IdempotencyStore is the in-memory ports.IdempotencyStore: the answers of
-// POSTs and PUTs made with an Idempotency-Key (the double of the
-// idempotency_keys table).
-type IdempotencyStore struct {
-	mu   sync.Mutex
-	rows map[string]repository.IdempotencyRecord
-}
-
-// NewIdempotencyStore constructs an empty IdempotencyStore.
-func NewIdempotencyStore() *IdempotencyStore {
-	return &IdempotencyStore{rows: map[string]repository.IdempotencyRecord{}}
-}
-
-// Lookup implements ports.IdempotencyStore.
-func (s *IdempotencyStore) Lookup(_ context.Context, key string) (repository.IdempotencyRecord, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rec, ok := s.rows[key]
-	return rec, ok, nil
-}
-
-// Save implements ports.IdempotencyStore; the first writer of a key wins.
-func (s *IdempotencyStore) Save(_ context.Context, rec repository.IdempotencyRecord) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, exists := s.rows[rec.Key]; !exists {
-		s.rows[rec.Key] = rec
-	}
-	return nil
 }
 
 // ProcessedEvents is the in-memory ports.ProcessedEvents double: the

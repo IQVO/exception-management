@@ -21,7 +21,9 @@ info:
     Events are published as CloudEvents on
     `warehouse.exception-management.events` through a transactional outbox
     (see `apis/asyncapi.yaml`, ADR 0004). Every `POST` is idempotent: send an
-    `Idempotency-Key`; a replay carries `Idempotency-Replayed: true`. A
+    `Idempotency-Key`; a replay carries `Idempotency-Replayed: true`, for
+    24 hours — a stored answer older than that is deleted by an hourly
+    purge and the key is free again (ADR 0015). A
     refusal is replayed only when it is final for the request (ADR 0015): a
     retryable one (404 `case-not-found`, 409 `concurrent-modification`)
     releases the key, so a retry executes again. Lists
@@ -517,7 +519,11 @@ components:
         128 characters or not printable ASCII. A replay with the same key and
         the same request (method, path and body) returns the stored response
         with the header `Idempotency-Replayed: true`; the same key with a
-        different request is a 409 `idempotency-key-reused`. A refusal is
+        different request is a 409 `idempotency-key-reused`. The stored
+        answer lives for 24 hours (ADR 0015): past that window the key is
+        free again — the same key and request executes anew (its effects run
+        again) and the same key with a different request is a new request,
+        not a 409. A refusal is
         stored and replayed only when it is final for the request
         (`invalid-*` validation, `case-already-resolved`, this key's own
         400/409 problems; ADR 0015): a retryable refusal — 404
@@ -572,6 +578,9 @@ components:
         `true` when this response is the stored answer of an earlier request
         with the same `Idempotency-Key` and the same method, path and body
         (the handler did not run again). Absent on the first execution.
+        The stored answer is replayed for 24 hours after the first
+        execution; past that window the key is free again and a repeat
+        executes anew.
       schema:
         type: string
         enum: ["true"]
@@ -728,7 +737,7 @@ components:
                 detail: no such path
                 instance: /nope
     Conflict:
-      description: The case is in the wrong state for the command, another request changed it first, or the Idempotency-Key was already used with a different request (`idempotency-key-reused`).
+      description: The case is in the wrong state for the command, another request changed it first, or the Idempotency-Key was already used with a different request (`idempotency-key-reused`; within the 24-hour replay window — past it the key is free again).
       content:
         application/problem+json:
           schema:

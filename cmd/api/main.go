@@ -4,9 +4,11 @@
 // readiness gate), the use cases over the real Postgres adapters, the ten
 // inbound Kafka fact consumers (each under its pinned consumer-group
 // variable; the held-stock group reads the inventory topic a second time,
-// ADR 0012), the SLA sweep ticker and the transactional-outbox relay (the
-// event side leaves the service ONLY through it, ADR 0004/0005). A consumer
-// that dies fails run — the process exits non-zero and the pod restarts.
+// ADR 0012), the SLA sweep ticker, the transactional-outbox relay (the
+// event side leaves the service ONLY through it, ADR 0004/0005) and the
+// idempotency-key retention purge (a 24-hour window, ADR 0015 addendum
+// 2026-11-22). A consumer that dies fails run — the process exits non-zero
+// and the pod restarts.
 //
 // Runtime: real Postgres + real Kafka only (no memory adapters); the
 // embedded migrations run at boot before anything serves. A missing
@@ -145,6 +147,12 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	// setting, never the unlimited default by omission.
 	sink, relay := newRelay(cfg, pool, logger)
 
+	// The idempotency-key retention purge (ADR 0015, addendum 2026-11-22):
+	// one pass at start, then hourly, over the same store the middleware
+	// reads. Like the sweeper it only ever logs; it ends with the run
+	// context and is awaited bounded on both shutdown paths.
+	purgeDone := startIdempotencyPurge(ctx, postgres.NewIdempotencyStore(pool), logger)
+
 	// The inbound side: eleven consumers (each under its pinned group id)
 	// and the SLA sweep ticker. A consumer death lands on errCh: run
 	// returns it, the process exits non-zero, the pod restarts.
@@ -167,6 +175,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	select {
 	case err := <-errCh:
 		awaitRelay(logger, relayDone)
+		awaitPurge(logger, purgeDone)
 		inbound.await(logger)
 		inbound.close(logger)
 		closeSinkBounded(logger, sink)
@@ -181,6 +190,16 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	// with the cancelled context between (3) and (4): their offsets only
 	// move after a durable effect, so an interrupted message is simply
 	// redelivered after the restart.
+	return drainForShutdown(logger, readiness, httpServer, relayDone, purgeDone, inbound, sink)
+}
+
+// drainForShutdown runs the fleet shutdown order (steps 1-4 of the comment
+// at its call site): readiness flips to not-ready, the drain delay passes,
+// HTTP drains, then the relay and the idempotency purge are awaited (the
+// relay LAST so nothing committed above is stranded) before the inbound
+// consumers are awaited and closed and the Kafka sink closed bounded.
+func drainForShutdown(logger *slog.Logger, readiness *inboundhttp.Readiness, httpServer *http.Server,
+	relayDone, purgeDone <-chan struct{}, inbound *inboundRuntime, sink *outboundkafka.RelaySink) error {
 	readiness.SetNotReady()
 	if delay := shutdownDrainDelay(logger); delay > 0 {
 		logger.Info("shutdown: readiness flipped to not-ready; waiting for traffic to drain", "drain_delay", delay.String())
@@ -192,6 +211,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("drain http: %w", err)
 	}
 	awaitRelay(logger, relayDone)
+	awaitPurge(logger, purgeDone)
 	inbound.await(logger)
 	inbound.close(logger)
 	closeSinkBounded(logger, sink)
