@@ -58,9 +58,9 @@ func OrderCorrelationHandlers(correlate *usecases.ConsumeCorrelation, logger *sl
 				}
 				return err
 			}
-			logger.InfoContext(ctx, "correlated fact consumed", "type", e.Type(), "event_id", e.ID(),
-				"subject", e.Subject(), "order_id", d.OrderID, "reason", d.Reason,
-				"closed", closed, "outcome", string(outcome))
+			logger.InfoContext(ctx, "correlated fact consumed", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()),
+				"subject", sanitizeLog(e.Subject()), "order_id", sanitizeLog(d.OrderID), "reason", sanitizeLog(d.Reason),
+				"closed", closed, "outcome", sanitizeLog(string(outcome)))
 			return nil
 		},
 	}

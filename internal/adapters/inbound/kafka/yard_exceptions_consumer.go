@@ -167,8 +167,8 @@ func yardCheckClosedHandler(checks *usecases.OpenYardCheckDiscrepancies, logger 
 		if err != nil {
 			return yardCheckError(e, err)
 		}
-		logger.InfoContext(ctx, "fact consumed", "type", e.Type(), "event_id", e.ID(), "subject", e.Subject(),
-			"discrepancies", opened, "outcome", string(outcome))
+		logger.InfoContext(ctx, "fact consumed", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "subject", sanitizeLog(e.Subject()),
+			"discrepancies", opened, "outcome", sanitizeLog(string(outcome)))
 		return nil
 	}
 }
