@@ -99,6 +99,15 @@ app.kubernetes.io/component label; the api Service never selects it
 {{- include "exception-management.fullname" . }}-a2a
 {{- end }}
 
+{{/* agents.colocate (warehouse-infra ADR 0012): "true" iff colocate, mcp and a2a are all on; else empty. */}}
+{{- define "exception-management.agentsColocated" -}}
+{{- if and (.Values.agents | default dict).colocate .Values.mcp.enabled .Values.a2a.enabled }}true{{ end -}}
+{{- end }}
+
+{{- define "exception-management.agentsFullname" -}}
+{{- printf "%s-agents" (include "exception-management.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{/*
 Fully qualified name of the optional frontend component (the exceptions_mfe
 Module Federation remote served by nginx). It is its own workload with its
