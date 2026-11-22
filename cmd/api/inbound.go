@@ -134,7 +134,7 @@ func startInbound(ctx context.Context, cfg bootConfig, pool *pgxpool.Pool, uow p
 			case <-ticker.C:
 				flagged, err := sweep.Execute(ctx)
 				if err != nil {
-					logger.Error("sla sweep failed; the next tick retries", "error", err)
+					logger.Error("sla sweep failed; the next tick retries", "error", sanitizeErr(err))
 					continue
 				}
 				if len(flagged) > 0 {

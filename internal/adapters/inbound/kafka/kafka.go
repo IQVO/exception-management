@@ -90,7 +90,7 @@ func defaultLogger(logger *slog.Logger) *slog.Logger {
 // retry as an ERROR log line so it is visible.
 func readerErrorLogger(logger *slog.Logger, consumer, topic string) kafkago.LoggerFunc {
 	return func(format string, args ...any) {
-		logger.Error("kafka reader error; retrying", "consumer", consumer, "topic", topic, "detail", fmt.Sprintf(format, args...))
+		logger.Error("kafka reader error; retrying", "consumer", consumer, "topic", topic, "detail", sanitizeLog(fmt.Sprintf(format, args...)))
 	}
 }
 
@@ -216,7 +216,7 @@ func (l *consumeLoop) handleWithDeadLetter(ctx context.Context, p RetryPolicy, s
 	if l.deadLetter != nil && errors.As(err, &poison) {
 		cause := deadLetterCause(err)
 		l.logger.ErrorContext(ctx, l.name+" message can never be applied; dead-lettering it without retry",
-			"error", cause, "partition", msg.Partition, "offset", msg.Offset)
+			"error", sanitizeErr(cause), "partition", msg.Partition, "offset", msg.Offset)
 		return l.retryUntilOK(ctx, p, sleep, "dead-letter publish", msg, func() error {
 			return l.deadLetter(ctx, msg, cause)
 		})
@@ -243,7 +243,7 @@ func (l *consumeLoop) retryUntilOK(ctx context.Context, p RetryPolicy, sleep sle
 			return ctx.Err()
 		}
 		l.logger.ErrorContext(ctx, l.name+" "+what+" failed; retrying the same message",
-			"error", err, "partition", msg.Partition, "offset", msg.Offset,
+			"error", sanitizeErr(err), "partition", msg.Partition, "offset", msg.Offset,
 			"attempt", attempt, "retry_in", delay)
 		if err := sleep(ctx, delay); err != nil {
 			return err

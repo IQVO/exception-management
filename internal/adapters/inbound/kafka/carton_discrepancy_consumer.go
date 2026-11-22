@@ -51,7 +51,7 @@ func CartonDiscrepancyHandlers(open *usecases.OpenCartonDiscrepancy, logger *slo
 				}
 				return err
 			}
-			logger.InfoContext(ctx, "fact consumed", "type", e.Type(), "event_id", e.ID(), "subject", e.Subject(), "kind", d.Kind, "outcome", string(outcome))
+			logger.InfoContext(ctx, "fact consumed", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "subject", sanitizeLog(e.Subject()), "kind", sanitizeLog(d.Kind), "outcome", sanitizeLog(string(outcome)))
 			return nil
 		},
 	}

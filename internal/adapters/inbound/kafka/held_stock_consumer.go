@@ -107,11 +107,11 @@ func heldCloseHandler[T any](logger *slog.Logger, settle *usecases.AutoResolveHe
 			// (a pre-cutoff hold): WARN and commit past — never retried,
 			// never dead-lettered (ADR 0012 point 3).
 			logger.WarnContext(ctx, "no case for the held unit; committing past",
-				"type", e.Type(), "event_id", e.ID(), "held_unit_id", c.HeldUnitID)
+				"type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "held_unit_id", sanitizeLog(c.HeldUnitID))
 			return nil
 		}
-		logger.InfoContext(ctx, "fact consumed", "type", e.Type(), "event_id", e.ID(),
-			"subject", e.Subject(), "outcome", string(outcome))
+		logger.InfoContext(ctx, "fact consumed", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()),
+			"subject", sanitizeLog(e.Subject()), "outcome", sanitizeLog(string(outcome)))
 		return nil
 	}
 }
