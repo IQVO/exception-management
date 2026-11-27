@@ -411,7 +411,7 @@ if render_only mcp-route.yaml "${base[@]}" --set mcp.enabled=true 2>&1 | grep -q
   fail "the mcp route must stay off until mcp.route.enabled"
 fi
 # With everything on (ct lint's values file): the api route strips
-# /api/exception-management, the mcp route rewrites to /mcp and both carry
+# /api/exception-management, the mcp route rewrites to /mcp; only the api route carries
 # the konghq.com/plugins annotation naming three rendered KongPlugins (the
 # deep contract — forbidden plugins, cors headers, backends — is
 # tests/test_kong_config.py).
@@ -424,6 +424,7 @@ mcp_route="$(render_only mcp-route.yaml "${everything[@]}")"
 grep -q 'value: /api/mcp/exception-management' <<<"$mcp_route" || fail "the mcp HTTPRoute does not match /api/mcp/exception-management"
 grep -q 'replacePrefixMatch: /mcp' <<<"$mcp_route" || fail "the mcp HTTPRoute does not rewrite to /mcp"
 grep -q "name: $release-mcp" <<<"$mcp_route" || fail "the mcp HTTPRoute does not target the -mcp Service"
+if grep -q 'konghq.com/' <<<"$mcp_route"; then fail "the mcp HTTPRoute must carry no Kong annotation (the Agent Router serves it, ADR 0015)"; fi
 # The a2a route stays off until a2a.route.enabled, even with a2a on; with it on
 # it matches /api/a2a/exception-management, rewrites to / (so the well-known
 # agent card stays reachable under the same prefix) and targets the -a2a Service.
@@ -434,7 +435,7 @@ a2a_route="$(render_only a2a-route.yaml "${everything[@]}")"
 grep -q 'value: /api/a2a/exception-management' <<<"$a2a_route" || fail "the a2a HTTPRoute does not match /api/a2a/exception-management"
 grep -q 'replacePrefixMatch: /$' <<<"$a2a_route" || fail "the a2a HTTPRoute does not rewrite to /"
 grep -q "name: $release-a2a" <<<"$a2a_route" || fail "the a2a HTTPRoute does not target the -a2a Service"
-grep -q 'konghq.com/plugins:' <<<"$a2a_route" || fail "the a2a HTTPRoute has no konghq.com/plugins annotation"
+if grep -q 'konghq.com/' <<<"$a2a_route"; then fail "the a2a HTTPRoute must carry no Kong annotation (the Agent Router serves it, ADR 0014)"; fi
 plugins="$(render_only kong-plugins.yaml "${everything[@]}")"
 for plugin in cors prometheus opentelemetry; do
   grep -q "plugin: $plugin" <<<"$plugins" || fail "the $plugin KongPlugin does not render when enabled"

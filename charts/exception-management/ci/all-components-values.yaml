@@ -28,8 +28,8 @@ mcp:
   route:
     enabled: true
     parentRefs:
-      - name: warehouse-gateway
-        namespace: kong
+      - name: agent-router
+        namespace: envoy-gateway-system
         sectionName: http
 
 # The optional a2a component on as well (read-only Agent2Agent agent, its Kong
@@ -39,8 +39,8 @@ a2a:
   route:
     enabled: true
     parentRefs:
-      - name: warehouse-gateway
-        namespace: kong
+      - name: agent-router
+        namespace: envoy-gateway-system
         sectionName: http
 
 # The Gateway API route + Kong plugins on as well, with the real host path
